@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
-  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload,
+  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload, Trash2,
 } from 'lucide-react'
-import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
@@ -102,7 +102,8 @@ function normalizePhone(value) {
   return digits.length === 10 || digits.length === 11 ? `55${digits}` : digits
 }
 function makeWhatsAppUrl(person, event, assignment) {
-  const message = `Olá, ${person.name}! Você está escalado(a) para ${event.title}, no dia ${formatDate(event.date)}, às ${event.time}, como ${assignment.role}. Obrigado!`
+  const eventTime = event.time?.slice(0, 5) || event.time
+  const message = `Olá, ${person.name}! Você está escalado(a) para ${event.title}, no dia ${formatDate(event.date)}, às ${eventTime}, como ${assignment.role}. Obrigado!`
   return `https://wa.me/${normalizePhone(person.whatsapp)}?text=${encodeURIComponent(message)}`
 }
 
@@ -123,6 +124,8 @@ function App() {
   const [modal, setModal] = useState('')
   const [editingMinister, setEditingMinister] = useState(null)
   const [search, setSearch] = useState('')
+  const [activeMinistersExpanded, setActiveMinistersExpanded] = useState(true)
+  const [inactiveMinistersExpanded, setInactiveMinistersExpanded] = useState(true)
   const [toast, setToast] = useState('')
   const [mobileMenu, setMobileMenu] = useState(false)
   const [showDemo, setShowDemo] = useState(true)
@@ -232,6 +235,19 @@ function App() {
   function activate(person) {
     persist((next) => ({ ...next, ministers: next.ministers.map((p) => p.id === person.id ? { ...p, active: true } : p) }), 'Ministro reativado e incluído novamente no rodízio.', () => setMinisterActive(person.id, true))
   }
+  function removeInactiveMinister(person) {
+    const confirmed = window.confirm(`Excluir permanentemente ${person.name}? As escalas (inclusive futuras) e o histórico mensal dessa pessoa também serão apagados. Essa ação não pode ser desfeita.`)
+    if (!confirmed) return
+    persist(
+      (next) => ({
+        ...next,
+        ministers: next.ministers.filter((minister) => minister.id !== person.id),
+        assignments: next.assignments.filter((assignment) => assignment.ministerId !== person.id),
+      }),
+      'Ministro e histórico associado excluídos.',
+      () => deleteMinisterRecord(person.id),
+    )
+  }
   function addRole(name) {
     const roleName = name.trim()
     if (!roleName || data.roles.some((role) => role.toLocaleLowerCase('pt-BR') === roleName.toLocaleLowerCase('pt-BR'))) {
@@ -314,12 +330,24 @@ function App() {
 
         {view === 'ministros' && <>
           <div className="page-heading"><div><span className="eyebrow">CADASTRO DA EQUIPE</span><h1>Ministros da palavra</h1><p>Gerencie os ministros ativos e os contatos para envio das escalas.</p></div><button className="button button-primary" onClick={() => setModal('minister')}><Plus size={17} /> Novo ministro</button></div>
-          <section className="panel roster-panel"><div className="table-toolbar"><div><strong>{activeMinisters.length} ministros ativos</strong><span>Os dados de demonstração não são contatos reais.</span></div><label className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar ministro" /></label></div><div className="table-wrap"><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${index < 3 ? 'high' : ''}`}>{index < 3 ? `#${index + 1} · Prioridade` : `#${index + 1}`}</span></td><td><div className="row-actions"><button className="row-menu" title="Editar ministro" onClick={() => { setEditingMinister(person); setModal('edit-minister') }}><Pencil size={15} /></button><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></div></td></tr>)}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div></section>
-          <section className="panel roster-panel inactive-roster"><PanelHeading title="Ministros inativados" subtitle={`${inactivePeople.length} pessoa(s) fora do rodízio; o histórico foi preservado.`} /><div className="table-wrap">{inactivePeople.length ? <table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES HISTÓRICAS</th><th>ÚLTIMA ESCALA</th><th></th></tr></thead><tbody>{inactivePeople.map((person) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp || <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><button className="button button-outline button-small" onClick={() => activate(person)}><UserRoundCheck size={15} /> Reativar</button></td></tr>)}</tbody></table> : <EmptyState text="Nenhum ministro inativado." />}</div></section>
+          <section className="panel roster-panel">
+            <div className="table-toolbar">
+              <div><strong>{activeMinisters.length} ministros ativos</strong><span>Os dados de demonstração não são contatos reais.</span></div>
+              <div className="table-toolbar-actions">
+                {activeMinistersExpanded && <label className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar ministro" /></label>}
+                <button className="button button-outline button-small table-collapse-toggle" aria-controls="active-ministers-table" aria-expanded={activeMinistersExpanded} aria-label={activeMinistersExpanded ? 'Minimizar tabela de ministros ativos' : 'Mostrar tabela de ministros ativos'} onClick={() => setActiveMinistersExpanded((expanded) => !expanded)}><ChevronDown className={activeMinistersExpanded ? 'collapse-chevron expanded' : 'collapse-chevron'} size={15} />{activeMinistersExpanded ? 'Minimizar' : 'Mostrar tabela'}</button>
+              </div>
+            </div>
+            <div className="table-wrap" id="active-ministers-table" hidden={!activeMinistersExpanded}><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${index < 3 ? 'high' : ''}`}>{index < 3 ? `#${index + 1} · Prioridade` : `#${index + 1}`}</span></td><td><div className="row-actions"><button className="row-menu" title="Editar ministro" onClick={() => { setEditingMinister(person); setModal('edit-minister') }}><Pencil size={15} /></button><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></div></td></tr>)}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div>
+          </section>
+          <section className="panel roster-panel inactive-roster">
+            <PanelHeading title="Ministros inativados" subtitle={`${inactivePeople.length} pessoa(s) fora do rodízio; o histórico foi preservado.`} action={<button className="button button-outline button-small table-collapse-toggle" aria-controls="inactive-ministers-table" aria-expanded={inactiveMinistersExpanded} aria-label={inactiveMinistersExpanded ? 'Minimizar tabela de ministros inativos' : 'Mostrar tabela de ministros inativos'} onClick={() => setInactiveMinistersExpanded((expanded) => !expanded)}><ChevronDown className={inactiveMinistersExpanded ? 'collapse-chevron expanded' : 'collapse-chevron'} size={15} />{inactiveMinistersExpanded ? 'Minimizar' : 'Mostrar tabela'}</button>} />
+            <div className="table-wrap" id="inactive-ministers-table" hidden={!inactiveMinistersExpanded}>{inactivePeople.length ? <table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES HISTÓRICAS</th><th>ÚLTIMA ESCALA</th><th></th></tr></thead><tbody>{inactivePeople.map((person) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp || <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><div className="row-actions"><button className="button button-outline button-small" onClick={() => activate(person)}><UserRoundCheck size={15} /> Reativar</button><button className="button button-danger button-small" title="Excluir ministro permanentemente" onClick={() => removeInactiveMinister(person)}><Trash2 size={14} /> Excluir</button></div></td></tr>)}</tbody></table> : <EmptyState text="Nenhum ministro inativado." />}</div>
+          </section>
         </>}
 
         {view === 'rodizio' && <>
-          <div className="page-heading"><div><span className="eyebrow">HISTÓRICO DE ESCALAÇÕES</span><h1>Rodízio mensal</h1><p>Veja em quais meses cada pessoa foi escalada e quem recebeu menos oportunidades.</p></div><button className="button button-outline" onClick={() => setToast('A importação da planilha será adicionada na próxima etapa.')}>Importar planilha</button></div>
+          <div className="page-heading"><div><span className="eyebrow">HISTÓRICO DE ESCALAÇÕES</span><h1>Rodízio mensal</h1><p>Veja em quais meses cada pessoa foi escalada e quem recebeu menos oportunidades.</p></div></div>
           <section className="panel rotation-panel"><div className="rotation-toolbar"><div className="sort-explainer"><div className="sort-icon"><ListFilter size={18} /></div><div><strong>Como ordenar a lista</strong><span>Veja em ordem alfabética ou por prioridade do rodízio.</span></div></div><div className="segmented"><button className={sortMode === 'priority' ? 'selected' : ''} onClick={() => setSortMode('priority')}>Prioridade</button><button className={sortMode === 'alphabetical' ? 'selected' : ''} onClick={() => setSortMode('alphabetical')}>A–Z</button></div></div><div className="legend rotation-legend"><span><i className="legend-dot complete" /> Escalado no mês</span><span><i className="legend-dot not-read" /> Sem escala no mês</span></div><div className="table-wrap rotation-table-wrap"><table className="rotation-table"><thead><tr><th className="sticky-col">MINISTRO</th>{MONTHS.map(([month, short]) => <th key={month}>{short}<small>{month.slice(0, 4)}</small></th>)}<th>TOTAL DE ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td className="sticky-col"><div className="rotation-person"><span className="avatar person-avatar">{initials(person.name)}</span><span><strong>{person.name}</strong><small>{sortMode === 'priority' ? `Prioridade ${index + 1}` : 'Ministro ativo'}</small></span></div></td>{MONTHS.map(([month]) => <td key={month}><MonthlyAssignmentsCell month={month} assignments={person.monthAssignments[month] || []} events={data.events} /></td>)}<td><strong className="total-cell">{person.total}</strong></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td></tr>)}</tbody></table></div><div className="table-footnote"><CircleHelp size={15} /> A prioridade diminui assim que a pessoa é adicionada a uma escala, mesmo que o evento ainda vá acontecer.</div></section>
         </>}
 
@@ -562,6 +590,92 @@ function MinisterModal({ onClose, onSave, person = null }) {
   return <Modal title={editing ? 'Editar ministro' : 'Cadastrar ministro'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Informe DDD e número; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Pencil size={16} /> {editing ? 'Salvar alterações' : 'Cadastrar'}</button></div></form></Modal>
 }
 function EventModal({ eventTypes, onClose, onSave }) { const [title, setTitle] = useState(''); const [kind, setKind] = useState(eventTypes[0] || 'Missa'); const [date, setDate] = useState(todayInputValue()); const [time, setTime] = useState('09:00'); const [error, setError] = useState(''); return <Modal title="Novo evento" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!title.trim() || !date) return setError('Preencha o nome e a data do evento.'); onSave({ title: title.trim(), kind, date, time }) }}><label className="field-label">Nome do evento<input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Missa dominical" /></label><div className="field-grid"><label className="field-label">Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}>{eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label className="field-label">Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label></div><label className="field-label">Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Criar evento</button></div></form></Modal> }
-function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave }) { const [ministerId, setMinisterId] = useState(''); const [role, setRole] = useState(roles[0] || DEFAULT_ROLES[0]); const [customRole, setCustomRole] = useState(''); const [error, setError] = useState(''); const available = ministers.filter((person) => !assignments.some((a) => a.ministerId === person.id)); return <Modal title="Adicionar à escala" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); const finalRole = role === '__other__' ? customRole.trim() : role; if (!ministerId) return setError('Selecione uma pessoa para escalar.'); if (!finalRole) return setError('Informe o papel desta pessoa no evento.'); onSave({ ministerId, role: finalRole }) }}><div className="selected-event-summary"><span className="selected-event-icon"><CalendarDays size={18} /></span><div><strong>{event.title}</strong><span>{formatDate(event.date, { day: '2-digit', month: 'long' })} · {event.time}</span></div></div><label className="field-label">Ministro<select autoFocus value={ministerId} onChange={(e) => setMinisterId(e.target.value)}><option value="">Selecione uma pessoa</option>{available.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label className="field-label">Papel no evento<select value={role} onChange={(e) => setRole(e.target.value)}>{roles.map((option) => <option key={option}>{option}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>{role === '__other__' && <label className="field-label">Descreva o papel<input value={customRole} onChange={(e) => setCustomRole(e.target.value)} placeholder="Ex.: Acolhida" /></label>}{available.length === 0 && <div className="form-error">Todos os ministros ativos já estão nesta escala.</div>}{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button disabled={!available.length} className="button button-primary"><Plus size={16} /> Escalar ministro</button></div></form></Modal> }
+function MinisterPicker({ ministers, value, onChange }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const listId = useId()
+  const selected = ministers.find((person) => person.id === value)
+  const filtered = ministers.filter((person) => person.name.toLocaleLowerCase('pt-BR').includes(query.trim().toLocaleLowerCase('pt-BR')))
+
+  function selectMinister(person) {
+    onChange(person.id)
+    setQuery('')
+    setOpen(false)
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setOpen(true)
+      if (filtered.length) setActiveIndex((index) => Math.min(index + 1, filtered.length - 1))
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex((index) => Math.max(index - 1, 0))
+    } else if (event.key === 'Enter' && open && filtered[activeIndex]) {
+      event.preventDefault()
+      selectMinister(filtered[activeIndex])
+    } else if (event.key === 'Escape') {
+      setOpen(false)
+      setQuery('')
+    }
+  }
+
+  return <div className="minister-picker">
+    <input
+      autoFocus
+      type="search"
+      autoComplete="off"
+      role="combobox"
+      aria-label="Buscar ministro pelo nome"
+      aria-autocomplete="list"
+      aria-expanded={open}
+      aria-controls={listId}
+      aria-activedescendant={open && filtered[activeIndex] ? `${listId}-${activeIndex}` : undefined}
+      value={open ? query : selected?.name || ''}
+      placeholder="Buscar pelo nome do ministro"
+      onFocus={() => { setQuery(''); setActiveIndex(0); setOpen(true) }}
+      onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); setOpen(true) }}
+      onKeyDown={handleKeyDown}
+      onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+    />
+    {open && <div className="minister-picker-results" id={listId} role="listbox" aria-label="Ministros disponíveis">
+      {filtered.length ? filtered.map((person, index) => <button
+        id={`${listId}-${index}`}
+        key={person.id}
+        type="button"
+        role="option"
+        aria-selected={person.id === value}
+        className={`minister-picker-option ${index === activeIndex ? 'active' : ''}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => selectMinister(person)}
+      >{person.name}</button>) : <span className="minister-picker-empty">Nenhum ministro encontrado.</span>}
+    </div>}
+  </div>
+}
+
+function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave }) {
+  const [ministerId, setMinisterId] = useState('')
+  const [role, setRole] = useState(roles[0] || DEFAULT_ROLES[0])
+  const [customRole, setCustomRole] = useState('')
+  const [error, setError] = useState('')
+  const available = ministers.filter((person) => !assignments.some((assignment) => assignment.ministerId === person.id))
+
+  return <Modal title="Adicionar à escala" onClose={onClose}><form onSubmit={(event) => {
+    event.preventDefault()
+    const finalRole = role === '__other__' ? customRole.trim() : role
+    if (!ministerId) return setError('Selecione uma pessoa para escalar.')
+    if (!finalRole) return setError('Informe o papel desta pessoa no evento.')
+    onSave({ ministerId, role: finalRole })
+  }}>
+    <div className="selected-event-summary"><span className="selected-event-icon"><CalendarDays size={18} /></span><div><strong>{event.title}</strong><span>{formatDate(event.date, { day: '2-digit', month: 'long' })} · {event.time}</span></div></div>
+    <label className="field-label">Ministro<MinisterPicker ministers={available} value={ministerId} onChange={setMinisterId} /></label>
+    <label className="field-label">Papel no evento<select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((option) => <option key={option}>{option}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>
+    {role === '__other__' && <label className="field-label">Descreva o papel<input value={customRole} onChange={(event) => setCustomRole(event.target.value)} placeholder="Ex.: Acolhida" /></label>}
+    {available.length === 0 && <div className="form-error">Todos os ministros ativos já estão nesta escala.</div>}
+    {error && <div className="form-error">{error}</div>}
+    <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button disabled={!available.length} className="button button-primary"><Plus size={16} /> Escalar ministro</button></div>
+  </form></Modal>
+}
 
 export default App

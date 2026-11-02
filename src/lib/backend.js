@@ -100,3 +100,9 @@ export async function setMinisterActive(ministerId, active) {
   const { error } = await supabase.from('ministers').update({ active }).eq('id', ministerId)
   if (error) throw error
 }
+
+export async function deleteMinister(ministerId) {
+  const { data, error } = await supabase.from('ministers').delete().eq('id', ministerId).eq('active', false).select('id').single()
+  if (error) throw error
+  return data
+}
