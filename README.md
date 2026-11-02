@@ -6,7 +6,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 
 ## Recursos
 
-- Cadastro de ministros com nome e número de WhatsApp.
+- Cadastro de ministros com nome e número de WhatsApp opcional.
 - Inativação, reativação e exclusão permanente de ministros inativos.
 - Cadastro de missas e outros eventos com nome, data e horário.
 - Exclusão de eventos com confirmação e remoção das escalações vinculadas.
