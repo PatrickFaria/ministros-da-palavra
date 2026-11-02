@@ -5,10 +5,11 @@ import {
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
   Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload,
 } from 'lucide-react'
-import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, importLegacyRoster, setMinisterActive } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
+const DEFAULT_EVENT_TYPES = ['Missa', 'Evento']
 function buildMonths() {
   const months = []
   const start = new Date(2026, 4, 1)
@@ -23,6 +24,7 @@ function buildMonths() {
 const MONTHS = buildMonths()
 const SAMPLE = {
   roles: DEFAULT_ROLES,
+  eventTypes: DEFAULT_EVENT_TYPES,
   ministers: [
     { id: 'p1', name: 'Ana Exemplo', whatsapp: '', active: true },
     { id: 'p2', name: 'Beatriz Exemplo', whatsapp: '', active: true },
@@ -61,7 +63,11 @@ function loadDemo() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     const value = saved ? JSON.parse(saved) : SAMPLE
-    return { ...value, roles: value.roles?.length ? value.roles : DEFAULT_ROLES }
+    return {
+      ...value,
+      roles: value.roles?.length ? value.roles : DEFAULT_ROLES,
+      eventTypes: value.eventTypes?.length ? value.eventTypes : DEFAULT_EVENT_TYPES,
+    }
   } catch {
     return SAMPLE
   }
@@ -234,6 +240,14 @@ function App() {
     }
     return persist((next) => ({ ...next, roles: [...next.roles, roleName] }), 'Novo papel cadastrado.', () => insertRole(roleName))
   }
+  function addEventType(name) {
+    const typeName = name.trim()
+    if (!typeName || data.eventTypes.some((type) => type.toLocaleLowerCase('pt-BR') === typeName.toLocaleLowerCase('pt-BR'))) {
+      setToast(typeName ? 'Esse tipo de evento já está cadastrado.' : 'Informe o nome do tipo de evento.')
+      return false
+    }
+    return persist((next) => ({ ...next, eventTypes: [...next.eventTypes, typeName] }), 'Novo tipo de evento cadastrado.', () => insertEventType(typeName))
+  }
   async function importRoster(ministers) {
     const result = await importLegacyRoster(ministers)
     setData(await loadData())
@@ -314,6 +328,7 @@ function App() {
           <div className="settings-grid">
             <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos da comunidade." action={<button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button>} />{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</section>
             <RoleSettings roles={data.roles} onAdd={addRole} />
+            <EventTypeSettings eventTypes={data.eventTypes} onAdd={addEventType} />
           </div>
           <section className="panel import-panel"><PanelHeading title="Importar histórico da planilha" subtitle="Importe os ministros e as participações mensais de um arquivo Excel." action={<button className="button button-outline button-small" disabled={!supabaseConfigured} onClick={() => setModal('import-roster')}><Upload size={15} /> Importar XLSX</button>} /><p className="settings-hint">A planilha atual não contém WhatsApp. Os ministros serão importados sem telefone e você poderá preencher os contatos no cadastro. A importação fica disponível depois de configurar o Supabase e aplicar as migrações.</p></section>
         </>}
@@ -324,7 +339,7 @@ function App() {
     {modal === 'minister' && <MinisterModal onClose={() => setModal('')} onSave={addMinister} />}
     {modal === 'edit-minister' && editingMinister && <MinisterModal person={editingMinister} onClose={() => { setModal(''); setEditingMinister(null) }} onSave={saveMinisterEdits} />}
     {modal === 'import-roster' && supabaseConfigured && <LegacyImportModal ministers={data.ministers} onClose={() => setModal('')} onImport={importRoster} />}
-    {modal === 'event' && <EventModal onClose={() => setModal('')} onSave={addEvent} />}
+    {modal === 'event' && <EventModal eventTypes={data.eventTypes} onClose={() => setModal('')} onSave={addEvent} />}
     {modal === 'assignment' && currentEvent && <AssignmentModal event={currentEvent} ministers={activeMinisters} assignments={data.assignments.filter((a) => a.eventId === currentEvent.id)} roles={data.roles} onClose={() => setModal('')} onSave={addAssignment} />}
     {toast && <div className="toast"><span className="toast-check"><Check size={15} /></span>{toast}</div>}
   </div>
@@ -458,6 +473,11 @@ function RoleSettings({ roles, onAdd }) {
   return <section className="panel settings-roles"><PanelHeading title="Papéis do ministro" subtitle="Opções que aparecem ao montar uma escala." /><form className="role-form" onSubmit={(event) => { event.preventDefault(); Promise.resolve(onAdd(name)).then((saved) => saved && setName('')) }}><label className="field-label">Novo tipo de papel<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Salmo responsorial" /></label><button className="button button-primary"><Plus size={15} /> Adicionar papel</button></form><div className="role-chip-list">{roles.map((role) => <span className="role-chip" key={role}>{role}</span>)}</div><p className="settings-hint">Na escala, ainda será possível informar um papel diferente em campo livre.</p></section>
 }
 
+function EventTypeSettings({ eventTypes, onAdd }) {
+  const [name, setName] = useState('')
+  return <section className="panel settings-event-types"><PanelHeading title="Tipos de evento" subtitle="Opções que aparecem ao cadastrar um evento." /><form className="role-form" onSubmit={(event) => { event.preventDefault(); Promise.resolve(onAdd(name)).then((saved) => saved && setName('')) }}><label className="field-label">Novo tipo de evento<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Celebração" /></label><button className="button button-primary"><Plus size={15} /> Adicionar tipo</button></form><div className="role-chip-list">{eventTypes.map((type) => <span className="role-chip" key={type}>{type}</span>)}</div></section>
+}
+
 function LegacyImportModal({ ministers, onClose, onImport }) {
   const [preview, setPreview] = useState(null)
   const [year, setYear] = useState('2026')
@@ -541,7 +561,7 @@ function MinisterModal({ onClose, onSave, person = null }) {
   const editing = Boolean(person)
   return <Modal title={editing ? 'Editar ministro' : 'Cadastrar ministro'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Informe DDD e número; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Pencil size={16} /> {editing ? 'Salvar alterações' : 'Cadastrar'}</button></div></form></Modal>
 }
-function EventModal({ onClose, onSave }) { const [title, setTitle] = useState(''); const [kind, setKind] = useState('Missa'); const [date, setDate] = useState(todayInputValue()); const [time, setTime] = useState('09:00'); const [error, setError] = useState(''); return <Modal title="Novo evento" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!title.trim() || !date) return setError('Preencha o nome e a data do evento.'); onSave({ title: title.trim(), kind, date, time }) }}><label className="field-label">Nome do evento<input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Missa dominical" /></label><div className="field-grid"><label className="field-label">Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}><option>Missa</option><option>Evento</option></select></label><label className="field-label">Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label></div><label className="field-label">Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Criar evento</button></div></form></Modal> }
+function EventModal({ eventTypes, onClose, onSave }) { const [title, setTitle] = useState(''); const [kind, setKind] = useState(eventTypes[0] || 'Missa'); const [date, setDate] = useState(todayInputValue()); const [time, setTime] = useState('09:00'); const [error, setError] = useState(''); return <Modal title="Novo evento" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!title.trim() || !date) return setError('Preencha o nome e a data do evento.'); onSave({ title: title.trim(), kind, date, time }) }}><label className="field-label">Nome do evento<input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Missa dominical" /></label><div className="field-grid"><label className="field-label">Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}>{eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label className="field-label">Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label></div><label className="field-label">Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Criar evento</button></div></form></Modal> }
 function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave }) { const [ministerId, setMinisterId] = useState(''); const [role, setRole] = useState(roles[0] || DEFAULT_ROLES[0]); const [customRole, setCustomRole] = useState(''); const [error, setError] = useState(''); const available = ministers.filter((person) => !assignments.some((a) => a.ministerId === person.id)); return <Modal title="Adicionar à escala" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); const finalRole = role === '__other__' ? customRole.trim() : role; if (!ministerId) return setError('Selecione uma pessoa para escalar.'); if (!finalRole) return setError('Informe o papel desta pessoa no evento.'); onSave({ ministerId, role: finalRole }) }}><div className="selected-event-summary"><span className="selected-event-icon"><CalendarDays size={18} /></span><div><strong>{event.title}</strong><span>{formatDate(event.date, { day: '2-digit', month: 'long' })} · {event.time}</span></div></div><label className="field-label">Ministro<select autoFocus value={ministerId} onChange={(e) => setMinisterId(e.target.value)}><option value="">Selecione uma pessoa</option>{available.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label className="field-label">Papel no evento<select value={role} onChange={(e) => setRole(e.target.value)}>{roles.map((option) => <option key={option}>{option}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>{role === '__other__' && <label className="field-label">Descreva o papel<input value={customRole} onChange={(e) => setCustomRole(e.target.value)} placeholder="Ex.: Acolhida" /></label>}{available.length === 0 && <div className="form-error">Todos os ministros ativos já estão nesta escala.</div>}{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button disabled={!available.length} className="button button-primary"><Plus size={16} /> Escalar ministro</button></div></form></Modal> }
 
 export default App

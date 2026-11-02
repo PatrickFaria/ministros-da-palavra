@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
+const DEFAULT_EVENT_TYPES = ['Missa', 'Evento']
 export const supabaseConfigured = Boolean(url && anonKey)
 export const demoMode = import.meta.env.DEV && !supabaseConfigured
 const supabase = supabaseConfigured ? createClient(url, anonKey) : null
@@ -24,7 +25,11 @@ export function getDemoData() {
     const saved = localStorage.getItem('ministros-da-palavra-demo-v1')
     if (!saved) return null
     const data = JSON.parse(saved)
-    return { ...data, roles: data.roles?.length ? data.roles : DEFAULT_ROLES }
+    return {
+      ...data,
+      roles: data.roles?.length ? data.roles : DEFAULT_ROLES,
+      eventTypes: data.eventTypes?.length ? data.eventTypes : DEFAULT_EVENT_TYPES,
+    }
   } catch {
     return null
   }
@@ -32,14 +37,15 @@ export function getDemoData() {
 
 export async function loadData() {
   if (!supabase) return getDemoData()
-  const [people, events, assignments, roles, history] = await Promise.all([
+  const [people, events, assignments, roles, history, eventTypes] = await Promise.all([
     supabase.from('ministers').select('*').order('name'),
     supabase.from('events').select('*').order('event_date'),
     supabase.from('assignments').select('*'),
     supabase.from('minister_roles').select('*').eq('active', true).order('name'),
     supabase.from('minister_monthly_history').select('*'),
+    supabase.from('event_types').select('*').order('name'),
   ])
-  const error = people.error || events.error || assignments.error || roles.error || history.error
+  const error = people.error || events.error || assignments.error || roles.error || history.error || eventTypes.error
   if (error) throw error
   return {
     ministers: people.data.map((p) => ({ id: p.id, name: p.name, whatsapp: p.whatsapp, active: p.active })),
@@ -49,6 +55,7 @@ export async function loadData() {
       ...history.data.map((item) => ({ id: `history-${item.id}`, eventId: null, ministerId: item.minister_id, role: '', month: item.month_start.slice(0, 7) })),
     ],
     roles: roles.data.length ? roles.data.map((r) => r.name) : DEFAULT_ROLES,
+    eventTypes: eventTypes.data.length ? eventTypes.data.map((type) => type.name) : DEFAULT_EVENT_TYPES,
   }
 }
 
@@ -81,6 +88,11 @@ export async function insertAssignment(assignment) {
 
 export async function insertRole(name) {
   const { error } = await supabase.from('minister_roles').insert({ name: name.trim() })
+  if (error) throw error
+}
+
+export async function insertEventType(name) {
+  const { error } = await supabase.from('event_types').insert({ name: name.trim() })
   if (error) throw error
 }
 

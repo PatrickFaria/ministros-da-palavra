@@ -8,6 +8,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 
 - Cadastro de ministros com nome e número de WhatsApp.
 - Cadastro de missas e outros eventos com nome, data e horário.
+- Catálogo configurável de tipos de evento, com opções iniciais para Missa e Evento.
 - Escala de ministros por evento, com papel selecionado do catálogo ou informado como texto livre.
 - Atalho para abrir uma mensagem pré-preenchida no WhatsApp com os dados do evento e o papel da pessoa.
 - Tabela de rodízio mensal, ordenada por prioridade ou em ordem alfabética.
@@ -48,7 +49,7 @@ Em uma compilação de produção sem as credenciais do Supabase, o app mostra u
 
 ### Importar a planilha da comunidade
 
-1. Conecte o app ao Supabase e aplique as três migrações.
+1. Conecte o app ao Supabase e aplique as quatro migrações.
 2. Entre com uma conta autorizada, abra **Configurações** e selecione **Importar XLSX**.
 3. Escolha o arquivo Excel. A prévia identifica os ministros e os meses, mostra as cores reconhecidas e impede a importação se houver cores desconhecidas ou nomes duplicados.
 4. Informe o ano correspondente aos cabeçalhos mensais e revise o resumo antes de importar.
@@ -62,6 +63,7 @@ A importação registra uma participação por ministro e mês marcado em verde.
    - `supabase/migrations/202611020001_initial_schema.sql`
    - `supabase/migrations/202611020002_role_catalog.sql`
    - `supabase/migrations/202611020003_monthly_history_import.sql`
+   - `supabase/migrations/202611020004_event_type_catalog.sql`
 3. Copie `.env.example` para `.env.local` e preencha as credenciais do projeto:
 
    ```env
