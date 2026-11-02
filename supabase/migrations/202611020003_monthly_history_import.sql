@@ -12,6 +12,8 @@ create index if not exists minister_monthly_history_month_idx
 
 alter table public.minister_monthly_history enable row level security;
 
+grant select, insert, delete on table public.minister_monthly_history to authenticated;
+
 drop policy if exists "authorized team can read monthly history" on public.minister_monthly_history;
 create policy "authorized team can read monthly history" on public.minister_monthly_history
   for select to authenticated using (public.current_app_role() in ('admin', 'editor'));

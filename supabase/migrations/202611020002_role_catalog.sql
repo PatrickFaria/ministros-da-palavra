@@ -7,6 +7,8 @@ create table if not exists public.minister_roles (
 
 alter table public.minister_roles enable row level security;
 
+grant select, insert on table public.minister_roles to authenticated;
+
 drop policy if exists "authorized team can read minister roles" on public.minister_roles;
 create policy "authorized team can read minister roles" on public.minister_roles
   for select to authenticated using (public.current_app_role() in ('admin', 'editor'));

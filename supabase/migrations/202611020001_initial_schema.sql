@@ -43,6 +43,13 @@ alter table public.ministers enable row level security;
 alter table public.events enable row level security;
 alter table public.assignments enable row level security;
 
+revoke all on function public.current_app_role() from public, anon;
+grant execute on function public.current_app_role() to authenticated;
+
+grant select, insert, update on table public.ministers to authenticated;
+grant select, insert, update, delete on table public.events to authenticated;
+grant select, insert, update, delete on table public.assignments to authenticated;
+
 drop policy if exists "authorized team can read ministers" on public.ministers;
 create policy "authorized team can read ministers" on public.ministers
   for select to authenticated using (public.current_app_role() in ('admin', 'editor'));
