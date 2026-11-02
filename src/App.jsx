@@ -5,7 +5,7 @@ import {
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
   Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList,
 } from 'lucide-react'
-import { supabaseConfigured, supabase, signIn, signOut, loadData, insertMinister, insertEvent, insertAssignment, insertRole, setMinisterActive } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, insertEvent, insertAssignment, insertRole, setMinisterActive } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
@@ -120,9 +120,9 @@ function App() {
   const [showDemo, setShowDemo] = useState(true)
   const [calendarMonth, setCalendarMonth] = useState(currentMonthKey)
   const [theme, setTheme] = useState(() => localStorage.getItem('ministros-da-palavra-theme') || 'light')
-  const [auth, setAuth] = useState({ status: supabaseConfigured ? 'loading' : 'demo', email: '', error: '' })
+  const [auth, setAuth] = useState({ status: supabaseConfigured ? 'loading' : demoMode ? 'demo' : 'configuration-error', email: '', error: '' })
 
-  useEffect(() => { if (!supabaseConfigured) localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }, [data])
+  useEffect(() => { if (demoMode) localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }, [data])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#151a17' : '#f7f6f0')
@@ -182,8 +182,10 @@ function App() {
       if (supabaseConfigured) {
         await remoteAction()
         setData(await loadData())
-      } else {
+      } else if (demoMode) {
         setData((previous) => change(structuredClone(previous)))
+      } else {
+        throw new Error('O Supabase não está configurado nesta publicação.')
       }
       setToast(message)
       return true
@@ -233,6 +235,7 @@ function App() {
     { id: 'configuracoes', label: 'Configurações', icon: Settings2 },
   ]
 
+  if (!supabaseConfigured && !demoMode) return <ConfigurationGate />
   if (supabaseConfigured && auth.status !== 'ready') return <AuthGate status={auth.status} email={auth.email} error={auth.error} onSignIn={async (email, password) => {
     try { await signIn(email, password); setAuth({ status: 'loading', email, error: '' }) }
     catch (error) { setAuth({ status: 'signed-out', email, error: error.message || 'Confira o e-mail e a senha.' }) }
@@ -252,7 +255,7 @@ function App() {
     <main className="main-area">
       <header className="topbar"><button className="menu-button icon-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu size={21} /></button><div className="breadcrumb"><span>Liturgia</span><ChevronRight size={15} /><strong>{navItems.find((item) => item.id === view)?.label || 'Eventos e escalas'}</strong></div><div className="topbar-actions"><div className="today-label"><CalendarDays size={16} />{formatDate(todayInputValue(), { day: '2-digit', month: 'long', year: 'numeric' })}</div><button className="icon-button theme-toggle" onClick={() => setTheme((value) => value === 'light' ? 'dark' : 'light')} title={theme === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'} aria-label={theme === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}>{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button><button className="icon-button notification" title="Notificações"><Bell size={18} /><i /></button><div className="avatar avatar-top">{supabaseConfigured ? initials(auth.email) : 'LP'}</div></div></header>
       <div className="page-content">
-        {!supabaseConfigured && showDemo && <div className="demo-banner"><span><strong>Modo demonstração</strong> — os dados exibidos são exemplos salvos somente neste navegador.</span><button onClick={() => setShowDemo(false)} aria-label="Fechar aviso"><X size={15} /></button></div>}
+        {demoMode && showDemo && <div className="demo-banner"><span><strong>Modo demonstração</strong> — os dados exibidos são exemplos salvos somente neste navegador.</span><button onClick={() => setShowDemo(false)} aria-label="Fechar aviso"><X size={15} /></button></div>}
         {view === 'inicio' && <>
           <div className="page-heading"><div><span className="eyebrow">{todayLabel()}</span><h1>Bom dia, equipe <span>☀️</span></h1><p>Veja o que vem pela frente e organize a próxima escala.</p></div><button className="button button-primary" onClick={() => setModal('event')}><Plus size={17} /> Novo evento</button></div>
           <section className="stats-grid">
@@ -434,6 +437,10 @@ function EventDetail({ event, data, onAdd }) {
 function RoleSettings({ roles, onAdd }) {
   const [name, setName] = useState('')
   return <section className="panel settings-roles"><PanelHeading title="Papéis do ministro" subtitle="Opções que aparecem ao montar uma escala." /><form className="role-form" onSubmit={(event) => { event.preventDefault(); Promise.resolve(onAdd(name)).then((saved) => saved && setName('')) }}><label className="field-label">Novo tipo de papel<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Salmo responsorial" /></label><button className="button button-primary"><Plus size={15} /> Adicionar papel</button></form><div className="role-chip-list">{roles.map((role) => <span className="role-chip" key={role}>{role}</span>)}</div><p className="settings-hint">Na escala, ainda será possível informar um papel diferente em campo livre.</p></section>
+}
+
+function ConfigurationGate() {
+  return <div className="auth-screen"><section className="auth-card"><div className="brand-mark auth-mark"><Cross size={24} strokeWidth={2.5} /></div><span className="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span><h1>Ministros da Palavra</h1><p className="auth-copy">Esta publicação ainda não está conectada ao Supabase. Por segurança, o modo demonstração está desativado nesta versão.</p><div className="auth-error">Configure <strong>VITE_SUPABASE_URL</strong> e <strong>VITE_SUPABASE_ANON_KEY</strong> no ambiente de produção e publique novamente.</div></section></div>
 }
 
 function AuthGate({ status, email, error, onSignIn, onSignOut }) {

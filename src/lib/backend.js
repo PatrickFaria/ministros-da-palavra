@@ -4,6 +4,7 @@ const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
 export const supabaseConfigured = Boolean(url && anonKey)
+export const demoMode = import.meta.env.DEV && !supabaseConfigured
 const supabase = supabaseConfigured ? createClient(url, anonKey) : null
 export { supabase }
 

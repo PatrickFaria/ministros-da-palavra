@@ -41,7 +41,9 @@ Abra no navegador o endereço local que o Vite mostrar no terminal (normalmente 
 
 ### Modo de demonstração
 
-Para testar a interface sem criar um projeto Supabase, basta instalar as dependências e iniciar o servidor. O app apresenta dados de exemplo fictícios e guarda alterações no `localStorage` do navegador. Esses dados não são compartilhados com outros dispositivos.
+Para testar a interface sem criar um projeto Supabase, basta instalar as dependências e iniciar o servidor com `npm run dev`. Em desenvolvimento local, o app apresenta dados de exemplo fictícios e guarda alterações no `localStorage` do navegador. Esses dados não são compartilhados com outros dispositivos.
+
+Em uma compilação de produção sem as credenciais do Supabase, o app mostra uma tela de configuração e bloqueia o modo demonstração. Configure as duas variáveis de ambiente no serviço de hospedagem antes de publicar.
 
 ## Configurar o Supabase
 
