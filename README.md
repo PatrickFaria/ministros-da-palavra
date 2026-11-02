@@ -13,6 +13,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 - Tabela de rodízio mensal, ordenada por prioridade ou em ordem alfabética.
 - Detalhes das escalações ao passar o mouse, navegar com o teclado ou tocar nos indicadores mensais. O histórico importado sem detalhes é identificado na tabela.
 - Cadastro de novos tipos de papel e consulta de ministros inativos, com opção de reativá-los.
+- Importação de nomes e histórico mensal a partir de planilha `.xlsx` com participações registradas por cores.
 - Tema claro e escuro.
 - Modo de demonstração local para conhecer a interface sem configurar o Supabase.
 
@@ -26,7 +27,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 ## Requisitos
 
 - Node.js 20.19 ou superior (ou 22.12 ou superior) e npm. O projeto inclui `.node-version` com Node 26 para uso com `fnm`.
-- Um projeto Supabase para autenticação e armazenamento compartilhado. Sem as variáveis do Supabase, o app abre em modo de demonstração e salva os dados no navegador atual.
+- Um projeto Supabase para autenticação e armazenamento compartilhado. Em desenvolvimento local, sem as variáveis do Supabase, o app abre em modo de demonstração e salva os dados no navegador atual. Em produção, a falta de configuração bloqueia o acesso aos dados de demonstração.
 
 ## Rodar localmente
 
@@ -45,12 +46,22 @@ Para testar a interface sem criar um projeto Supabase, basta instalar as depend�
 
 Em uma compilação de produção sem as credenciais do Supabase, o app mostra uma tela de configuração e bloqueia o modo demonstração. Configure as duas variáveis de ambiente no serviço de hospedagem antes de publicar.
 
+### Importar a planilha da comunidade
+
+1. Conecte o app ao Supabase e aplique as três migrações.
+2. Entre com uma conta autorizada, abra **Configurações** e selecione **Importar XLSX**.
+3. Escolha o arquivo Excel. A prévia identifica os ministros e os meses, mostra as cores reconhecidas e impede a importação se houver cores desconhecidas ou nomes duplicados.
+4. Informe o ano correspondente aos cabeçalhos mensais e revise o resumo antes de importar.
+
+A importação registra uma participação por ministro e mês marcado em verde. Os tons de vermelho indicam ausência de participação e células sem preenchimento ficam sem registro. O histórico mensal não informa evento, horário ou papel, então a tela do rodízio o apresenta como histórico sem detalhes. A planilha original não contém WhatsApp; os contatos podem ser adicionados depois no cadastro dos ministros.
+
 ## Configurar o Supabase
 
 1. Crie um projeto no [Supabase](https://supabase.com/).
 2. No SQL Editor do projeto, execute os arquivos em ordem:
    - `supabase/migrations/202611020001_initial_schema.sql`
    - `supabase/migrations/202611020002_role_catalog.sql`
+   - `supabase/migrations/202611020003_monthly_history_import.sql`
 3. Copie `.env.example` para `.env.local` e preencha as credenciais do projeto:
 
    ```env
@@ -89,7 +100,6 @@ supabase/migrations/    Estrutura do banco e políticas de acesso
 
 ## Próximos passos
 
-- Importar e revisar os nomes e o histórico da planilha usada pela comunidade.
 - Criar o fluxo de convite e administração de acessos dentro do app.
 - Publicar em um domínio HTTPS e validar o uso compartilhado com a equipe.
 

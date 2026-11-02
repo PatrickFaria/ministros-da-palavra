@@ -32,18 +32,22 @@ export function getDemoData() {
 
 export async function loadData() {
   if (!supabase) return getDemoData()
-  const [people, events, assignments, roles] = await Promise.all([
+  const [people, events, assignments, roles, history] = await Promise.all([
     supabase.from('ministers').select('*').order('name'),
     supabase.from('events').select('*').order('event_date'),
     supabase.from('assignments').select('*'),
     supabase.from('minister_roles').select('*').eq('active', true).order('name'),
+    supabase.from('minister_monthly_history').select('*'),
   ])
-  const error = people.error || events.error || assignments.error || roles.error
+  const error = people.error || events.error || assignments.error || roles.error || history.error
   if (error) throw error
   return {
     ministers: people.data.map((p) => ({ id: p.id, name: p.name, whatsapp: p.whatsapp, active: p.active })),
     events: events.data.map((e) => ({ id: e.id, title: e.title, date: e.event_date, time: e.event_time, kind: e.kind })),
-    assignments: assignments.data.map((a) => ({ id: a.id, eventId: a.event_id, ministerId: a.minister_id, role: a.role })),
+    assignments: [
+      ...assignments.data.map((a) => ({ id: a.id, eventId: a.event_id, ministerId: a.minister_id, role: a.role })),
+      ...history.data.map((item) => ({ id: `history-${item.id}`, eventId: null, ministerId: item.minister_id, role: '', month: item.month_start.slice(0, 7) })),
+    ],
     roles: roles.data.length ? roles.data.map((r) => r.name) : DEFAULT_ROLES,
   }
 }
@@ -51,6 +55,17 @@ export async function loadData() {
 export async function insertMinister(person) {
   const { error } = await supabase.from('ministers').insert({ name: person.name.trim(), whatsapp: person.whatsapp.trim(), active: true })
   if (error) throw error
+}
+
+export async function updateMinister(ministerId, person) {
+  const { error } = await supabase.from('ministers').update({ name: person.name.trim(), whatsapp: person.whatsapp.trim() }).eq('id', ministerId)
+  if (error) throw error
+}
+
+export async function importLegacyRoster(ministers) {
+  const { data, error } = await supabase.rpc('import_legacy_minister_roster', { p_ministers: ministers })
+  if (error) throw error
+  return data
 }
 
 export async function insertEvent(event) {

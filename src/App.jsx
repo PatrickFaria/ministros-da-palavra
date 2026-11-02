@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
-  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList,
+  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload,
 } from 'lucide-react'
-import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, insertEvent, insertAssignment, insertRole, setMinisterActive } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, importLegacyRoster, setMinisterActive } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
@@ -89,6 +89,7 @@ function monthHeading(key) {
 function todayLabel() { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date()).toLocaleUpperCase('pt-BR') }
 function formatShortDate(value) { return formatDate(value, { weekday: 'short', day: '2-digit', month: 'short' }) }
 function initials(name = '') { return name.trim().split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase() }
+function normalizeMinisterName(value = '') { return value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR') }
 function dateSort(a, b) { return `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`) }
 function normalizePhone(value) {
   const digits = value.replace(/\D/g, '')
@@ -114,6 +115,7 @@ function App() {
   const [sortMode, setSortMode] = useState('priority')
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [modal, setModal] = useState('')
+  const [editingMinister, setEditingMinister] = useState(null)
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
   const [mobileMenu, setMobileMenu] = useState(false)
@@ -197,6 +199,13 @@ function App() {
   function addMinister(form) {
     persist((next) => ({ ...next, ministers: [...next.ministers, { id: uid(), name: form.name.trim(), whatsapp: form.whatsapp.trim(), active: true }] }), 'Ministro cadastrado.', () => insertMinister(form)).then((saved) => saved && setModal(''))
   }
+  function saveMinisterEdits(form) {
+    const person = editingMinister
+    if (!person) return
+    persist((next) => ({ ...next, ministers: next.ministers.map((p) => p.id === person.id ? { ...p, name: form.name.trim(), whatsapp: form.whatsapp.trim() } : p) }), 'Dados do ministro atualizados.', () => updateMinisterRecord(person.id, form)).then((saved) => {
+      if (saved) { setModal(''); setEditingMinister(null) }
+    })
+  }
   function addEvent(form) {
     const id = uid()
     let remoteId = id
@@ -224,6 +233,13 @@ function App() {
       return false
     }
     return persist((next) => ({ ...next, roles: [...next.roles, roleName] }), 'Novo papel cadastrado.', () => insertRole(roleName))
+  }
+  async function importRoster(ministers) {
+    const result = await importLegacyRoster(ministers)
+    setData(await loadData())
+    setModal('')
+    setToast(`${result.ministers} ministros e ${result.history} participações históricas importados.`)
+    return result
   }
   function navigate(nextView) { setView(nextView); setMobileMenu(false); setSelectedEvent(null); setSearch('') }
 
@@ -284,7 +300,7 @@ function App() {
 
         {view === 'ministros' && <>
           <div className="page-heading"><div><span className="eyebrow">CADASTRO DA EQUIPE</span><h1>Ministros da palavra</h1><p>Gerencie os ministros ativos e os contatos para envio das escalas.</p></div><button className="button button-primary" onClick={() => setModal('minister')}><Plus size={17} /> Novo ministro</button></div>
-          <section className="panel roster-panel"><div className="table-toolbar"><div><strong>{activeMinisters.length} ministros ativos</strong><span>Os dados de demonstração não são contatos reais.</span></div><label className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar ministro" /></label></div><div className="table-wrap"><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${index < 3 ? 'high' : ''}`}>{index < 3 ? `#${index + 1} · Prioridade` : `#${index + 1}`}</span></td><td><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></td></tr>)}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div></section>
+          <section className="panel roster-panel"><div className="table-toolbar"><div><strong>{activeMinisters.length} ministros ativos</strong><span>Os dados de demonstração não são contatos reais.</span></div><label className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar ministro" /></label></div><div className="table-wrap"><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${index < 3 ? 'high' : ''}`}>{index < 3 ? `#${index + 1} · Prioridade` : `#${index + 1}`}</span></td><td><div className="row-actions"><button className="row-menu" title="Editar ministro" onClick={() => { setEditingMinister(person); setModal('edit-minister') }}><Pencil size={15} /></button><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></div></td></tr>)}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div></section>
           <section className="panel roster-panel inactive-roster"><PanelHeading title="Ministros inativados" subtitle={`${inactivePeople.length} pessoa(s) fora do rodízio; o histórico foi preservado.`} /><div className="table-wrap">{inactivePeople.length ? <table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES HISTÓRICAS</th><th>ÚLTIMA ESCALA</th><th></th></tr></thead><tbody>{inactivePeople.map((person) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp || <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><button className="button button-outline button-small" onClick={() => activate(person)}><UserRoundCheck size={15} /> Reativar</button></td></tr>)}</tbody></table> : <EmptyState text="Nenhum ministro inativado." />}</div></section>
         </>}
 
@@ -299,12 +315,15 @@ function App() {
             <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos da comunidade." action={<button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button>} />{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</section>
             <RoleSettings roles={data.roles} onAdd={addRole} />
           </div>
+          <section className="panel import-panel"><PanelHeading title="Importar histórico da planilha" subtitle="Importe os ministros e as participações mensais de um arquivo Excel." action={<button className="button button-outline button-small" disabled={!supabaseConfigured} onClick={() => setModal('import-roster')}><Upload size={15} /> Importar XLSX</button>} /><p className="settings-hint">A planilha atual não contém WhatsApp. Os ministros serão importados sem telefone e você poderá preencher os contatos no cadastro. A importação fica disponível depois de configurar o Supabase e aplicar as migrações.</p></section>
         </>}
         <footer className="page-footer"><span>Ministros da Palavra</span><span>Organização com cuidado e comunidade.</span></footer>
       </div>
     </main>
 
     {modal === 'minister' && <MinisterModal onClose={() => setModal('')} onSave={addMinister} />}
+    {modal === 'edit-minister' && editingMinister && <MinisterModal person={editingMinister} onClose={() => { setModal(''); setEditingMinister(null) }} onSave={saveMinisterEdits} />}
+    {modal === 'import-roster' && supabaseConfigured && <LegacyImportModal ministers={data.ministers} onClose={() => setModal('')} onImport={importRoster} />}
     {modal === 'event' && <EventModal onClose={() => setModal('')} onSave={addEvent} />}
     {modal === 'assignment' && currentEvent && <AssignmentModal event={currentEvent} ministers={activeMinisters} assignments={data.assignments.filter((a) => a.eventId === currentEvent.id)} roles={data.roles} onClose={() => setModal('')} onSave={addAssignment} />}
     {toast && <div className="toast"><span className="toast-check"><Check size={15} /></span>{toast}</div>}
@@ -439,6 +458,71 @@ function RoleSettings({ roles, onAdd }) {
   return <section className="panel settings-roles"><PanelHeading title="Papéis do ministro" subtitle="Opções que aparecem ao montar uma escala." /><form className="role-form" onSubmit={(event) => { event.preventDefault(); Promise.resolve(onAdd(name)).then((saved) => saved && setName('')) }}><label className="field-label">Novo tipo de papel<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Salmo responsorial" /></label><button className="button button-primary"><Plus size={15} /> Adicionar papel</button></form><div className="role-chip-list">{roles.map((role) => <span className="role-chip" key={role}>{role}</span>)}</div><p className="settings-hint">Na escala, ainda será possível informar um papel diferente em campo livre.</p></section>
 }
 
+function LegacyImportModal({ ministers, onClose, onImport }) {
+  const [preview, setPreview] = useState(null)
+  const [year, setYear] = useState('2026')
+  const [confirmAllActive, setConfirmAllActive] = useState(false)
+  const [fileName, setFileName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const existingNames = new Set(ministers.map((person) => normalizeMinisterName(person.name)))
+  const duplicateNames = preview?.people.filter((person) => existingNames.has(normalizeMinisterName(person.name))) || []
+  const monthNames = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  const participationCount = preview?.people.reduce((total, person) => total + person.participatedMonths.length, 0) || 0
+  const canImport = Boolean(preview && confirmAllActive && !preview.unknownColors.length && !preview.duplicateNames.length && !duplicateNames.length && Number(year) >= 2000 && Number(year) <= 2100 && !busy)
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    setPreview(null)
+    setError('')
+    setFileName(file?.name || '')
+    if (!file) return
+    try {
+      const { parseLegacySpreadsheet } = await import('./lib/legacySpreadsheet.js')
+      setPreview(await parseLegacySpreadsheet(file))
+    } catch (parseError) {
+      setError(parseError.message || 'Não consegui ler esta planilha.')
+    }
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!canImport) return
+    setBusy(true)
+    setError('')
+    try {
+      const people = preview.people.map((person) => ({
+        name: person.name,
+        whatsapp: '',
+        participatedMonths: person.participatedMonths.map((month) => `${year}-${String(month).padStart(2, '0')}`),
+      }))
+      await onImport(people)
+    } catch (importError) {
+      setError(importError.message || 'Não foi possível importar a planilha.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <Modal title="Importar histórico da planilha" onClose={onClose} wide><form className="legacy-import-form" onSubmit={submit}>
+    <label className="field-label">Arquivo Excel (.xlsx)<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleFile} /></label>
+    {fileName && <p className="settings-hint">Arquivo: {fileName}</p>}
+    <div className="field-grid"><label className="field-label">Ano das colunas mensais<input type="number" min="2000" max="2100" value={year} onChange={(event) => setYear(event.target.value)} /></label><div className="legacy-import-months"><span className="field-label">Meses encontrados</span><strong>{preview ? preview.monthColumns.map((month) => monthNames[month - 1]).join(', ') : 'Aguardando arquivo'}</strong></div></div>
+    {preview && <>
+      <div className="legacy-import-summary"><div><strong>{preview.people.length}</strong><span>ministros</span></div><div><strong>{participationCount}</strong><span>participações verdes</span></div><div><strong>{preview.nonParticipationCells}</strong><span>células vermelhas ignoradas</span></div><div><strong>{preview.emptyCells}</strong><span>células sem registro</span></div></div>
+      <div className="legacy-import-notes"><p>As células verdes serão importadas como uma participação por ministro e mês. Todos os tons de vermelho serão tratados como “não participou”. As células sem cor não criarão histórico.</p><p>O arquivo não informa WhatsApp nem situação ativo/inativo. Os ministros entrarão como ativos e sem telefone; adicione os contatos depois no cadastro.</p><p>O histórico importado não tem evento, horário ou papel. A tela de rodízio o identificará como histórico sem detalhes.</p></div>
+      <label className="legacy-import-confirm"><input type="checkbox" checked={confirmAllActive} onChange={(event) => setConfirmAllActive(event.target.checked)} /><span>Confirmo importar todos os {preview.people.length} ministros como ativos.</span></label>
+      {preview.colors.length > 0 && <div className="legacy-color-list"><strong>Cores identificadas</strong>{preview.colors.map(({ color, count }) => <span key={color}><i style={{ background: color.startsWith('FF') ? `#${color.slice(2)}` : '#a4ada5' }} /> {count} célula(s)</span>)}</div>}
+      {preview.unknownColors.length > 0 && <div className="form-error">Há cores sem mapeamento ({preview.unknownColors.join(', ')}). Ajuste a planilha ou peça uma revisão antes de importar.</div>}
+      {preview.duplicateNames.length > 0 && <div className="form-error">A planilha contém nomes repetidos: {preview.duplicateNames.join(', ')}.</div>}
+      {duplicateNames.length > 0 && <div className="form-error">Já existem ministros com estes nomes: {duplicateNames.map((person) => person.name).join(', ')}. Resolva os duplicados antes de importar.</div>}
+      <div className="legacy-import-sample"><strong>Prévia dos primeiros ministros</strong><span>{preview.people.slice(0, 8).map((person) => `${person.name} (${person.participatedMonths.length})`).join(' · ')}{preview.people.length > 8 ? ' · …' : ''}</span></div>
+    </>}
+    {error && <div className="form-error">{error}</div>}
+    <div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary" disabled={!canImport}><Upload size={15} /> {busy ? 'Importando…' : 'Importar ministros e histórico'}</button></div>
+  </form></Modal>
+}
+
 function ConfigurationGate() {
   return <div className="auth-screen"><section className="auth-card"><div className="brand-mark auth-mark"><Cross size={24} strokeWidth={2.5} /></div><span className="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span><h1>Ministros da Palavra</h1><p className="auth-copy">Esta publicação ainda não está conectada ao Supabase. Por segurança, o modo demonstração está desativado nesta versão.</p><div className="auth-error">Configure <strong>VITE_SUPABASE_URL</strong> e <strong>VITE_SUPABASE_ANON_KEY</strong> no ambiente de produção e publique novamente.</div></section></div>
 }
@@ -450,7 +534,13 @@ function AuthGate({ status, email, error, onSignIn, onSignOut }) {
   return <div className="auth-screen"><div className="auth-card"><div className="brand-mark auth-mark"><Cross size={24} strokeWidth={2.5} /></div><span className="eyebrow">ACESSO DA EQUIPE</span><h1>Ministros da Palavra</h1>{status === 'loading' ? <p className="auth-copy">Conectando ao espaço da comunidade…</p> : status === 'denied' ? <><p className="auth-copy">{error}</p><button className="button button-outline auth-submit" onClick={onSignOut}>Sair desta conta</button></> : status === 'error' ? <><p className="auth-error">{error}</p><button className="button button-outline auth-submit" onClick={() => window.location.reload()}>Tentar novamente</button></> : <><p className="auth-copy">Entre com o e-mail e a senha fornecidos pela administradora.</p><form onSubmit={async (e) => { e.preventDefault(); setBusy(true); await onSignIn(address, password); setBusy(false) }}><label className="field-label">E-mail<input autoComplete="username" type="email" value={address} onChange={(e) => setAddress(e.target.value)} required placeholder="voce@email.com" /></label><label className="field-label">Senha<input autoComplete="current-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Sua senha" /></label>{error && <div className="auth-error">{error}</div>}<button disabled={busy} className="button button-primary auth-submit">{busy ? 'Entrando…' : 'Entrar'}</button></form></>}<span className="auth-foot">Acesso restrito à equipe de liturgia.</span></div></div>
 }
 
-function MinisterModal({ onClose, onSave }) { const [name, setName] = useState(''); const [whatsapp, setWhatsapp] = useState(''); const [error, setError] = useState(''); return <Modal title="Cadastrar ministro" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Informe DDD e número; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Cadastrar</button></div></form></Modal> }
+function MinisterModal({ onClose, onSave, person = null }) {
+  const [name, setName] = useState(person?.name || '')
+  const [whatsapp, setWhatsapp] = useState(person?.whatsapp || '')
+  const [error, setError] = useState('')
+  const editing = Boolean(person)
+  return <Modal title={editing ? 'Editar ministro' : 'Cadastrar ministro'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Informe DDD e número; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Pencil size={16} /> {editing ? 'Salvar alterações' : 'Cadastrar'}</button></div></form></Modal>
+}
 function EventModal({ onClose, onSave }) { const [title, setTitle] = useState(''); const [kind, setKind] = useState('Missa'); const [date, setDate] = useState(todayInputValue()); const [time, setTime] = useState('09:00'); const [error, setError] = useState(''); return <Modal title="Novo evento" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!title.trim() || !date) return setError('Preencha o nome e a data do evento.'); onSave({ title: title.trim(), kind, date, time }) }}><label className="field-label">Nome do evento<input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Missa dominical" /></label><div className="field-grid"><label className="field-label">Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}><option>Missa</option><option>Evento</option></select></label><label className="field-label">Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label></div><label className="field-label">Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Criar evento</button></div></form></Modal> }
 function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave }) { const [ministerId, setMinisterId] = useState(''); const [role, setRole] = useState(roles[0] || DEFAULT_ROLES[0]); const [customRole, setCustomRole] = useState(''); const [error, setError] = useState(''); const available = ministers.filter((person) => !assignments.some((a) => a.ministerId === person.id)); return <Modal title="Adicionar à escala" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); const finalRole = role === '__other__' ? customRole.trim() : role; if (!ministerId) return setError('Selecione uma pessoa para escalar.'); if (!finalRole) return setError('Informe o papel desta pessoa no evento.'); onSave({ ministerId, role: finalRole }) }}><div className="selected-event-summary"><span className="selected-event-icon"><CalendarDays size={18} /></span><div><strong>{event.title}</strong><span>{formatDate(event.date, { day: '2-digit', month: 'long' })} · {event.time}</span></div></div><label className="field-label">Ministro<select autoFocus value={ministerId} onChange={(e) => setMinisterId(e.target.value)}><option value="">Selecione uma pessoa</option>{available.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label className="field-label">Papel no evento<select value={role} onChange={(e) => setRole(e.target.value)}>{roles.map((option) => <option key={option}>{option}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>{role === '__other__' && <label className="field-label">Descreva o papel<input value={customRole} onChange={(e) => setCustomRole(e.target.value)} placeholder="Ex.: Acolhida" /></label>}{available.length === 0 && <div className="form-error">Todos os ministros ativos já estão nesta escala.</div>}{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button disabled={!available.length} className="button button-primary"><Plus size={16} /> Escalar ministro</button></div></form></Modal> }
 
