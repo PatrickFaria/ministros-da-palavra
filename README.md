@@ -1,43 +1,93 @@
 # Ministros da Palavra
 
-Aplicativo web responsivo para organizar ministros, eventos, escalas e o histórico mensal do rodízio.
+Aplicativo web para ajudar a equipe de liturgia a organizar os ministros da palavra, montar escalas para missas e eventos e acompanhar o rodízio ao longo do tempo.
 
-## Situação atual
+O projeto foi pensado para funcionar também no celular. Quando publicado em HTTPS, pode ser instalado na tela inicial como um aplicativo (PWA).
 
-- Interface inicial funcional em modo de demonstração; os exemplos ficam no armazenamento local deste navegador quando Supabase não está configurado.
-- Cadastro de ministros com WhatsApp, cadastro de eventos com data e hora, escala com papel definido, confirmação de leitura, prioridade e link para abrir uma mensagem pré-preenchida no WhatsApp.
-- PWA configurada para instalação na tela inicial.
-- Login por e-mail/senha e operações de cadastro conectadas ao Supabase quando as variáveis de ambiente estiverem presentes.
-- Migração inicial do Supabase em `supabase/migrations` e variáveis de ambiente de exemplo em `.env.example`.
-- A escala passa a contar para a prioridade imediatamente; o histórico e os totais representam oportunidades de escala, sem confirmação de leitura.
-- Ministros inativos podem ser reativados na própria tela de cadastro. Configurações permite criar eventos e manter o catálogo de papéis.
-- Os dados de demonstração são fictícios. Ainda não representam a planilha da comunidade.
+## Recursos
 
-## Pré-requisitos
+- Cadastro de ministros com nome e número de WhatsApp.
+- Cadastro de missas e outros eventos com nome, data e horário.
+- Escala de ministros por evento, com papel selecionado do catálogo ou informado como texto livre.
+- Atalho para abrir uma mensagem pré-preenchida no WhatsApp com os dados do evento e o papel da pessoa.
+- Tabela de rodízio mensal, ordenada por prioridade ou em ordem alfabética.
+- Detalhes das escalações ao passar o mouse, navegar com o teclado ou tocar nos indicadores mensais. O histórico importado sem detalhes é identificado na tabela.
+- Cadastro de novos tipos de papel e consulta de ministros inativos, com opção de reativá-los.
+- Tema claro e escuro.
+- Modo de demonstração local para conhecer a interface sem configurar o Supabase.
 
-- Node.js 26 e npm (o Vite exige Node 20.19+ na linha 20 ou 22.12+ nas linhas seguintes).
-- Projeto Supabase para persistência compartilhada; sem credenciais do Supabase, o aplicativo usa modo de demonstração local.
+## Tecnologias
 
-O projeto inclui `.node-version` com Node 26 para o `fnm` selecioná-lo ao entrar na pasta, quando a integração de shell estiver configurada.
+- React 19
+- Vite 7
+- Supabase (Auth e PostgreSQL com políticas RLS)
+- PWA com manifesto e ícones para instalação no dispositivo
 
-## Executar localmente
+## Requisitos
 
-1. Atualize o Node.js para uma versão LTS compatível.
-2. Abra esta pasta no terminal e rode `npm install`.
-3. Rode `npm run dev` e abra o endereço informado pelo Vite.
+- Node.js 20.19 ou superior (ou 22.12 ou superior) e npm. O projeto inclui `.node-version` com Node 26 para uso com `fnm`.
+- Um projeto Supabase para autenticação e armazenamento compartilhado. Sem as variáveis do Supabase, o app abre em modo de demonstração e salva os dados no navegador atual.
 
-## Conectar ao Supabase
+## Rodar localmente
 
-1. Crie um projeto Supabase e execute as migrações em ordem: `202611020001_initial_schema.sql` e `202611020002_role_catalog.sql`.
-2. Copie `.env.example` para `.env.local` e informe a URL e a chave `anon` do projeto.
-3. Desative o cadastro público. Convide os membros da equipe e defina `app_metadata.role` como `admin` ou `editor` para cada conta autorizada. O primeiro admin deve ser configurado pelo painel/SQL administrativo do Supabase.
-4. Reinicie o servidor local. As políticas RLS da migração permitem acesso somente a contas autenticadas com uma dessas funções.
+```bash
+git clone https://github.com/PatrickFaria/ministros-da-palavra.git
+cd ministros-da-palavra
+npm install
+npm run dev
+```
 
-Não use a chave `service_role` no navegador.
+Abra no navegador o endereço local que o Vite mostrar no terminal (normalmente `http://localhost:5173`).
+
+### Modo de demonstração
+
+Para testar a interface sem criar um projeto Supabase, basta instalar as dependências e iniciar o servidor. O app apresenta dados de exemplo fictícios e guarda alterações no `localStorage` do navegador. Esses dados não são compartilhados com outros dispositivos.
+
+## Configurar o Supabase
+
+1. Crie um projeto no [Supabase](https://supabase.com/).
+2. No SQL Editor do projeto, execute os arquivos em ordem:
+   - `supabase/migrations/202611020001_initial_schema.sql`
+   - `supabase/migrations/202611020002_role_catalog.sql`
+3. Copie `.env.example` para `.env.local` e preencha as credenciais do projeto:
+
+   ```env
+   VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+   VITE_SUPABASE_ANON_KEY=sua-chave-publica-anon
+   ```
+
+4. No Supabase, convide as pessoas autorizadas a usar o aplicativo e atribua a elas o papel `admin` ou `editor` em `app_metadata.role`. O cadastro público deve permanecer desativado. O primeiro administrador precisa ser configurado por uma pessoa administradora no painel ou via SQL do Supabase.
+5. Reinicie o servidor local para carregar as variáveis de ambiente.
+
+As políticas RLS das migrações limitam as operações a usuários autenticados com um dos papéis autorizados. Nunca coloque a chave `service_role` no frontend ou em variáveis `VITE_*`.
+
+## Publicar
+
+Gere a versão otimizada para produção:
+
+```bash
+npm run build
+```
+
+O conteúdo pronto para publicação fica na pasta `dist/`. Publique essa pasta em um serviço de hospedagem para sites estáticos, configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` como variáveis de ambiente de build e use HTTPS para habilitar a instalação como PWA. Para testar a versão compilada localmente:
+
+```bash
+npm run preview
+```
+
+## Organização do projeto
+
+```text
+public/                 Ícones, manifesto e service worker da PWA
+src/                    Interface React e integração com o Supabase
+src/lib/backend.js      Autenticação e acesso aos dados
+supabase/migrations/    Estrutura do banco e políticas de acesso
+.env.example            Modelo das variáveis de ambiente
+```
 
 ## Próximos passos
 
-- Implementar fluxo de convite de equipe dentro da área administrativa.
-- Importar o arquivo XLSX/CSV real e revisar nomes/status antes de gravar.
-- Criar, na importação, eventos históricos mensais e associações marcadas como realizadas.
-- Configurar domínio HTTPS e publicar a versão de produção.
+- Importar e revisar os nomes e o histórico da planilha usada pela comunidade.
+- Criar o fluxo de convite e administração de acessos dentro do app.
+- Publicar em um domínio HTTPS e validar o uso compartilhado com a equipe.
+
