@@ -81,6 +81,11 @@ export async function insertEvent(event) {
   return data.id
 }
 
+export async function deleteEvent(eventId) {
+  const { error } = await supabase.from('events').delete().eq('id', eventId)
+  if (error) throw error
+}
+
 export async function insertAssignment(assignment) {
   const { error } = await supabase.from('assignments').insert({ event_id: assignment.eventId, minister_id: assignment.ministerId, role: assignment.role })
   if (error) throw error

@@ -9,6 +9,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 - Cadastro de ministros com nome e número de WhatsApp.
 - Inativação, reativação e exclusão permanente de ministros inativos.
 - Cadastro de missas e outros eventos com nome, data e horário.
+- Exclusão de eventos com confirmação e remoção das escalações vinculadas.
 - Catálogo configurável de tipos de evento, com opções iniciais para Missa e Evento.
 - Escala de ministros por evento, com papel selecionado do catálogo ou informado como texto livre.
 - Atalho para abrir uma mensagem pré-preenchida no WhatsApp com os dados do evento e o papel da pessoa.

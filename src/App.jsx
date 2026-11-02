@@ -5,7 +5,7 @@ import {
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
   Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload, Trash2,
 } from 'lucide-react'
-import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, deleteEvent as deleteEventRecord, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
@@ -225,6 +225,16 @@ function App() {
       setModal('')
     })
   }
+  function removeEvent(event) {
+    if (!window.confirm(`Excluir permanentemente "${event.title}"? Todas as escalações deste evento também serão apagadas. Essa ação não pode ser desfeita.`)) return
+    persist(
+      (next) => ({ ...next, events: next.events.filter((item) => item.id !== event.id), assignments: next.assignments.filter((assignment) => assignment.eventId !== event.id) }),
+      'Evento e escalações excluídos.',
+      () => deleteEventRecord(event.id),
+    ).then((saved) => {
+      if (saved) { setSelectedEvent(null); setView('eventos') }
+    })
+  }
   function addAssignment(form) {
     persist((next) => ({ ...next, assignments: [...next.assignments, { id: uid(), eventId: currentEvent.id, ministerId: form.ministerId, role: form.role }] }), 'Pessoa adicionada à escala; a prioridade foi atualizada.', () => insertAssignment({ ...form, eventId: currentEvent.id })).then((saved) => saved && setModal(''))
   }
@@ -324,7 +334,7 @@ function App() {
         </>}
 
         {view === 'eventos' && <>
-          <div className="page-heading"><div><span className="eyebrow">CALENDÁRIO DA COMUNIDADE</span><h1>{currentEvent ? currentEvent.title : 'Eventos e escalas'}</h1><p>{currentEvent ? `${formatDate(currentEvent.date, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })} · ${currentEvent.time}` : 'Cadastre celebrações e organize quem serve em cada uma.'}</p></div><div className="heading-actions">{currentEvent && <button className="button button-outline" onClick={() => setSelectedEvent(null)}><ChevronLeft size={17} /> Voltar à agenda</button>}<button className="button button-primary" onClick={() => setModal(currentEvent ? 'assignment' : 'event')}><Plus size={17} /> {currentEvent ? 'Adicionar ministro' : 'Novo evento'}</button></div></div>
+          <div className="page-heading"><div><span className="eyebrow">CALENDÁRIO DA COMUNIDADE</span><h1>{currentEvent ? currentEvent.title : 'Eventos e escalas'}</h1><p>{currentEvent ? `${formatDate(currentEvent.date, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })} · ${currentEvent.time}` : 'Cadastre celebrações e organize quem serve em cada uma.'}</p></div><div className="heading-actions">{currentEvent && <><button className="button button-outline" onClick={() => setSelectedEvent(null)}><ChevronLeft size={17} /> Voltar à agenda</button><button className="button button-danger" onClick={() => removeEvent(currentEvent)}><Trash2 size={15} /> Excluir evento</button></>}<button className="button button-primary" onClick={() => setModal(currentEvent ? 'assignment' : 'event')}><Plus size={17} /> {currentEvent ? 'Adicionar ministro' : 'Novo evento'}</button></div></div>
           {currentEvent ? <EventDetail event={currentEvent} data={data} onAdd={() => setModal('assignment')} /> : <section className="panel calendar-panel"><div className="calendar-toolbar"><div className="month-picker"><button className="icon-button" aria-label="Mês anterior" onClick={() => setCalendarMonth((month) => shiftMonth(month, -1))}><ChevronLeft size={18} /></button><strong>{monthHeading(calendarMonth)}</strong><button className="icon-button" aria-label="Próximo mês" onClick={() => setCalendarMonth((month) => shiftMonth(month, 1))}><ChevronRight size={18} /></button></div><div className="legend"><span><i className="legend-dot planned" /> Pessoas escaladas</span></div></div><div className="event-card-grid">{eventsThisMonth.map((event) => <EventCard key={event.id} event={event} data={data} onOpen={() => setSelectedEvent(event.id)} />)}<button className="add-event-card" onClick={() => setModal('event')}><span><Plus size={20} /></span><strong>Adicionar evento</strong><small>Cadastre uma missa ou atividade</small></button></div></section>}
         </>}
 
