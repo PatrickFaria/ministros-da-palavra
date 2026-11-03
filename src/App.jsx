@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
-  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload, Trash2,
+  Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload, Trash2, Copy,
 } from 'lucide-react'
 import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, importAgendaEvents as importAgendaEventsRecord, deleteEvent as deleteEventRecord, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
 
@@ -107,6 +107,45 @@ function makeWhatsAppUrl(person, event, assignment) {
   return `https://wa.me/${normalizePhone(person.whatsapp)}?text=${encodeURIComponent(message)}`
 }
 
+function buildMonthlyReport(month, events, assignments, ministers) {
+  const ministerById = new Map(ministers.map((minister) => [minister.id, minister]))
+  const eventBlocks = [...events].sort(dateSort).map((event) => {
+    const eventAssignments = assignments
+      .filter((assignment) => assignment.eventId === event.id)
+      .sort((a, b) => {
+        const roleOrder = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
+        const aRole = roleOrder.indexOf(a.role)
+        const bRole = roleOrder.indexOf(b.role)
+        const aRank = aRole === -1 ? roleOrder.length : aRole
+        const bRank = bRole === -1 ? roleOrder.length : bRole
+        return aRank - bRank || a.role.localeCompare(b.role, 'pt-BR') || (ministerById.get(a.ministerId)?.name || '').localeCompare(ministerById.get(b.ministerId)?.name || '', 'pt-BR')
+      })
+    const time = event.time?.slice(0, 5)
+    const lines = [`*${event.title}*${time ? ` · ${time}` : ''}`]
+    if (eventAssignments.length) {
+      eventAssignments.forEach((assignment) => {
+        const minister = ministerById.get(assignment.ministerId)
+        if (minister) lines.push(`• ${assignment.role}: ${minister.name}`)
+      })
+    } else {
+      lines.push('• Escala em aberto')
+    }
+    return { date: event.date, text: lines.join('\n') }
+  })
+
+  const groupedByDate = eventBlocks.reduce((groups, block) => {
+    const group = groups.find((item) => item.date === block.date)
+    if (group) group.events.push(block.text)
+    else groups.push({ date: block.date, events: [block.text] })
+    return groups
+  }, [])
+  const body = groupedByDate.map(({ date, events: dailyEvents }) => {
+    const dayHeading = formatDate(date, { weekday: 'long', day: '2-digit', month: '2-digit' }).toLocaleUpperCase('pt-BR')
+    return `*${dayHeading}*\n${dailyEvents.join('\n\n')}`
+  })
+  return [`*EVENTOS E ESCALAS — ${monthHeading(month).toLocaleUpperCase('pt-BR')}*`, ...body].join('\n\n')
+}
+
 function Modal({ title, onClose, children, wide = false }) {
   return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
     <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
@@ -114,6 +153,36 @@ function Modal({ title, onClose, children, wide = false }) {
       {children}
     </section>
   </div>
+}
+
+function MonthlyReportModal({ month, events, assignments, ministers, onClose }) {
+  const [copyMessage, setCopyMessage] = useState('')
+  const reportText = useMemo(() => buildMonthlyReport(month, events, assignments, ministers), [month, events, assignments, ministers])
+  const reportRef = useRef(null)
+
+  async function copyReport() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard indisponível')
+      await navigator.clipboard.writeText(reportText)
+      setCopyMessage('Relatório copiado. Agora é só colar no WhatsApp.')
+    } catch {
+      reportRef.current?.focus()
+      reportRef.current?.select()
+      setCopyMessage('Não foi possível copiar automaticamente. O texto está selecionado; copie manualmente.')
+    }
+  }
+
+  return <Modal title="Relatório para WhatsApp" onClose={onClose} wide>
+    {events.length ? <>
+      <p className="report-description">Confira o relatório de {monthHeading(month)} antes de copiar e enviar.</p>
+      <textarea className="report-textarea" ref={reportRef} aria-label="Prévia do relatório mensal" readOnly value={reportText} onFocus={(event) => event.currentTarget.select()} />
+      {copyMessage && <p className="report-copy-message" role="status">{copyMessage}</p>}
+      <div className="modal-actions"><button className="button button-outline" onClick={onClose}>Fechar</button><button className="button button-primary" onClick={copyReport}><Copy size={15} /> Copiar relatório</button></div>
+    </> : <>
+      <div className="report-empty-state"><CalendarDays size={24} /><p>Nenhum evento cadastrado em {monthHeading(month)}.</p></div>
+      <div className="modal-actions"><button className="button button-outline" onClick={onClose}>Fechar</button></div>
+    </>}
+  </Modal>
 }
 
 function App() {
@@ -126,6 +195,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [activeMinistersExpanded, setActiveMinistersExpanded] = useState(true)
   const [inactiveMinistersExpanded, setInactiveMinistersExpanded] = useState(true)
+  const [settingsEventsExpanded, setSettingsEventsExpanded] = useState(true)
   const [toast, setToast] = useState('')
   const [mobileMenu, setMobileMenu] = useState(false)
   const [showDemo, setShowDemo] = useState(true)
@@ -369,7 +439,7 @@ function App() {
 
         {view === 'eventos' && <>
           <div className="page-heading"><div><span className="eyebrow">CALENDÁRIO DA COMUNIDADE</span><h1>{currentEvent ? currentEvent.title : 'Eventos e escalas'}</h1><p>{currentEvent ? `${formatDate(currentEvent.date, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })} · ${currentEvent.time}` : 'Cadastre celebrações e organize quem serve em cada uma.'}</p></div><div className="heading-actions">{currentEvent && <><button className="button button-outline" onClick={() => setSelectedEvent(null)}><ChevronLeft size={17} /> Voltar à agenda</button><button className="button button-danger" onClick={() => removeEvent(currentEvent)}><Trash2 size={15} /> Excluir evento</button></>}<button className="button button-primary" onClick={() => setModal(currentEvent ? 'assignment' : 'event')}><Plus size={17} /> {currentEvent ? 'Adicionar ministro' : 'Novo evento'}</button></div></div>
-          {currentEvent ? <EventDetail event={currentEvent} data={data} onAdd={() => setModal('assignment')} /> : <section className="panel calendar-panel"><div className="calendar-toolbar"><div className="month-picker"><button className="icon-button" aria-label="Mês anterior" onClick={() => setCalendarMonth((month) => shiftMonth(month, -1))}><ChevronLeft size={18} /></button><strong>{monthHeading(calendarMonth)}</strong><button className="icon-button" aria-label="Próximo mês" onClick={() => setCalendarMonth((month) => shiftMonth(month, 1))}><ChevronRight size={18} /></button></div><div className="legend"><span><i className="legend-dot planned" /> Pessoas escaladas</span></div></div><div className="event-card-grid">{eventsThisMonth.map((event) => <EventCard key={event.id} event={event} data={data} onOpen={() => setSelectedEvent(event.id)} />)}<button className="add-event-card" onClick={() => setModal('event')}><span><Plus size={20} /></span><strong>Adicionar evento</strong><small>Cadastre uma missa ou atividade</small></button></div></section>}
+          {currentEvent ? <EventDetail event={currentEvent} data={data} onAdd={() => setModal('assignment')} /> : <section className="panel calendar-panel"><div className="calendar-toolbar"><div className="month-picker"><button className="icon-button" aria-label="Mês anterior" onClick={() => setCalendarMonth((month) => shiftMonth(month, -1))}><ChevronLeft size={18} /></button><strong>{monthHeading(calendarMonth)}</strong><button className="icon-button" aria-label="Próximo mês" onClick={() => setCalendarMonth((month) => shiftMonth(month, 1))}><ChevronRight size={18} /></button></div><div className="calendar-toolbar-actions"><div className="legend"><span><i className="legend-dot planned" /> Pessoas escaladas</span></div><button className="button button-outline button-small" onClick={() => setModal('monthly-report')}><MessageCircle size={15} /> Gerar relatório WhatsApp</button></div></div><div className="event-card-grid">{eventsThisMonth.map((event) => <EventCard key={event.id} event={event} data={data} onOpen={() => setSelectedEvent(event.id)} />)}<button className="add-event-card" onClick={() => setModal('event')}><span><Plus size={20} /></span><strong>Adicionar evento</strong><small>Cadastre uma missa ou atividade</small></button></div></section>}
         </>}
 
         {view === 'ministros' && <>
@@ -399,7 +469,7 @@ function App() {
         {view === 'configuracoes' && <>
           <div className="page-heading"><div><span className="eyebrow">PREFERÊNCIAS DA EQUIPE</span><h1>Configurações</h1><p>Cadastre eventos e mantenha os papéis disponíveis na escala.</p></div></div>
           <div className="settings-grid">
-            <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos ou importe a agenda mensal em PDF." action={<div className="settings-event-actions"><input ref={agendaPdfInputRef} className="visually-hidden" type="file" accept=".pdf,application/pdf" aria-label="Selecionar agenda mensal em PDF" onChange={(event) => importMonthlyAgenda(event.target.files?.[0])} /><button className="button button-outline button-small" disabled={agendaPdfImporting || (!supabaseConfigured && !demoMode)} onClick={() => agendaPdfInputRef.current?.click()}><Upload size={15} /> {agendaPdfImporting ? 'Importando PDF…' : 'Importar PDF'}</button><button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button></div>} />{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</section>
+            <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos ou importe a agenda mensal em PDF." action={<div className="settings-event-actions"><input ref={agendaPdfInputRef} className="visually-hidden" type="file" accept=".pdf,application/pdf" aria-label="Selecionar agenda mensal em PDF" onChange={(event) => importMonthlyAgenda(event.target.files?.[0])} /><button className="button button-outline button-small" disabled={agendaPdfImporting || (!supabaseConfigured && !demoMode)} onClick={() => agendaPdfInputRef.current?.click()}><Upload size={15} /> {agendaPdfImporting ? 'Importando PDF…' : 'Importar PDF'}</button><button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button><button className="button button-outline button-small table-collapse-toggle" aria-controls="settings-events-content" aria-expanded={settingsEventsExpanded} aria-label={settingsEventsExpanded ? 'Minimizar painel de eventos cadastrados' : 'Mostrar eventos cadastrados'} onClick={() => setSettingsEventsExpanded((expanded) => !expanded)}><ChevronDown className={settingsEventsExpanded ? 'collapse-chevron expanded' : 'collapse-chevron'} size={15} />{settingsEventsExpanded ? 'Minimizar' : 'Mostrar eventos'}</button></div>} /><div id="settings-events-content" hidden={!settingsEventsExpanded}>{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</div></section>
             <RoleSettings roles={data.roles} onAdd={addRole} />
             <EventTypeSettings eventTypes={data.eventTypes} onAdd={addEventType} />
           </div>
@@ -414,6 +484,7 @@ function App() {
     {modal === 'import-roster' && supabaseConfigured && <LegacyImportModal ministers={data.ministers} onClose={() => setModal('')} onImport={importRoster} />}
     {modal === 'event' && <EventModal eventTypes={data.eventTypes} onClose={() => setModal('')} onSave={addEvent} />}
     {modal === 'assignment' && currentEvent && <AssignmentModal event={currentEvent} ministers={activeMinisters} assignments={data.assignments.filter((a) => a.eventId === currentEvent.id)} roles={data.roles} onClose={() => setModal('')} onSave={addAssignment} />}
+    {modal === 'monthly-report' && <MonthlyReportModal month={calendarMonth} events={eventsThisMonth} assignments={data.assignments} ministers={data.ministers} onClose={() => setModal('')} />}
     {toast && <div className="toast"><span className="toast-check"><Check size={15} /></span>{toast}</div>}
   </div>
 }
