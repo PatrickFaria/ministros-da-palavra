@@ -10,6 +10,7 @@ import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, inse
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
 const DEFAULT_EVENT_TYPES = ['Missa', 'Evento']
+const TIME_PREFERENCES = [{ value: '07', label: '7h' }, { value: '09', label: '9h' }, { value: '19', label: '19h' }]
 function buildMonths() {
   const months = []
   const start = new Date(2026, 4, 1)
@@ -278,12 +279,12 @@ function App() {
     }
   }
   function addMinister(form) {
-    persist((next) => ({ ...next, ministers: [...next.ministers, { id: uid(), name: form.name.trim(), whatsapp: form.whatsapp.trim(), active: true }] }), 'Ministro cadastrado.', () => insertMinister(form)).then((saved) => saved && setModal(''))
+    persist((next) => ({ ...next, ministers: [...next.ministers, { id: uid(), name: form.name.trim(), whatsapp: form.whatsapp.trim(), preferredRoles: form.preferredRoles, preferredTimes: form.preferredTimes, active: true }] }), 'Ministro cadastrado.', () => insertMinister(form)).then((saved) => saved && setModal(''))
   }
   function saveMinisterEdits(form) {
     const person = editingMinister
     if (!person) return
-    persist((next) => ({ ...next, ministers: next.ministers.map((p) => p.id === person.id ? { ...p, name: form.name.trim(), whatsapp: form.whatsapp.trim() } : p) }), 'Dados do ministro atualizados.', () => updateMinisterRecord(person.id, form)).then((saved) => {
+    persist((next) => ({ ...next, ministers: next.ministers.map((p) => p.id === person.id ? { ...p, name: form.name.trim(), whatsapp: form.whatsapp.trim(), preferredRoles: form.preferredRoles, preferredTimes: form.preferredTimes } : p) }), 'Dados do ministro atualizados.', () => updateMinisterRecord(person.id, form)).then((saved) => {
       if (saved) { setModal(''); setEditingMinister(null) }
     })
   }
@@ -479,8 +480,8 @@ function App() {
       </div>
     </main>
 
-    {modal === 'minister' && <MinisterModal onClose={() => setModal('')} onSave={addMinister} />}
-    {modal === 'edit-minister' && editingMinister && <MinisterModal person={editingMinister} onClose={() => { setModal(''); setEditingMinister(null) }} onSave={saveMinisterEdits} />}
+    {modal === 'minister' && <MinisterModal roles={data.roles} onClose={() => setModal('')} onSave={addMinister} />}
+    {modal === 'edit-minister' && editingMinister && <MinisterModal roles={data.roles} person={editingMinister} onClose={() => { setModal(''); setEditingMinister(null) }} onSave={saveMinisterEdits} />}
     {modal === 'import-roster' && supabaseConfigured && <LegacyImportModal ministers={data.ministers} onClose={() => setModal('')} onImport={importRoster} />}
     {modal === 'event' && <EventModal eventTypes={data.eventTypes} onClose={() => setModal('')} onSave={addEvent} />}
     {modal === 'assignment' && currentEvent && <AssignmentModal event={currentEvent} ministers={activeMinisters} assignments={data.assignments.filter((a) => a.eventId === currentEvent.id)} roles={data.roles} onClose={() => setModal('')} onSave={addAssignment} />}
@@ -698,12 +699,20 @@ function AuthGate({ status, email, error, onSignIn, onSignOut }) {
   return <div className="auth-screen"><div className="auth-card"><div className="brand-mark auth-mark"><Cross size={24} strokeWidth={2.5} /></div><span className="eyebrow">ACESSO DA EQUIPE</span><h1>Ministros da Palavra</h1>{status === 'loading' ? <p className="auth-copy">Conectando ao espaço da comunidade…</p> : status === 'denied' ? <><p className="auth-copy">{error}</p><button className="button button-outline auth-submit" onClick={onSignOut}>Sair desta conta</button></> : status === 'error' ? <><p className="auth-error">{error}</p><button className="button button-outline auth-submit" onClick={() => window.location.reload()}>Tentar novamente</button></> : <><p className="auth-copy">Entre com o e-mail e a senha fornecidos pela administradora.</p><form onSubmit={async (e) => { e.preventDefault(); setBusy(true); await onSignIn(address, password); setBusy(false) }}><label className="field-label">E-mail<input autoComplete="username" type="email" value={address} onChange={(e) => setAddress(e.target.value)} required placeholder="voce@email.com" /></label><label className="field-label">Senha<input autoComplete="current-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Sua senha" /></label>{error && <div className="auth-error">{error}</div>}<button disabled={busy} className="button button-primary auth-submit">{busy ? 'Entrando…' : 'Entrar'}</button></form></>}<span className="auth-foot">Acesso restrito à equipe de liturgia.</span></div></div>
 }
 
-function MinisterModal({ onClose, onSave, person = null }) {
+function MinisterModal({ roles, onClose, onSave, person = null }) {
   const [name, setName] = useState(person?.name || '')
   const [whatsapp, setWhatsapp] = useState(person?.whatsapp || '')
+  const [preferredRoles, setPreferredRoles] = useState(person?.preferredRoles || [])
+  const [preferredTimes, setPreferredTimes] = useState(person?.preferredTimes || [])
   const [error, setError] = useState('')
   const editing = Boolean(person)
-  return <Modal title={editing ? 'Editar ministro' : 'Cadastrar ministro'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (whatsapp.trim() && normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp (opcional)<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Se informar o número, inclua DDD; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Pencil size={16} /> {editing ? 'Salvar alterações' : 'Cadastrar'}</button></div></form></Modal>
+  function toggleRole(role) {
+    setPreferredRoles((current) => current.includes(role) ? current.filter((item) => item !== role) : [...current, role])
+  }
+  function toggleTime(time) {
+    setPreferredTimes((current) => current.includes(time) ? current.filter((item) => item !== time) : [...current, time])
+  }
+  return <Modal title={editing ? 'Editar ministro' : 'Cadastrar ministro'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError('Informe o nome do ministro.'); if (whatsapp.trim() && normalizePhone(whatsapp).length < 12) return setError('Informe um WhatsApp válido com DDD.'); onSave({ name, whatsapp, preferredRoles, preferredTimes }) }}><label className="field-label">Nome completo<input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Maria da Silva" /></label><label className="field-label">WhatsApp (opcional)<input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" inputMode="tel" /></label><small className="field-hint">Se informar o número, inclua DDD; no Brasil, o código +55 será acrescentado ao abrir o WhatsApp. Para outros países, informe também o DDI.</small><fieldset className="preference-fieldset"><legend>Papéis de preferência</legend><label className="role-preference-option"><input type="checkbox" checked={preferredRoles.length === 0} onChange={() => setPreferredRoles([])} />Não tem preferências</label>{roles.map((role) => <label className="role-preference-option" key={role}><input type="checkbox" checked={preferredRoles.includes(role)} onChange={() => toggleRole(role)} />{role}</label>)}</fieldset><fieldset className="preference-fieldset"><legend>Horários de preferência</legend><label className="role-preference-option"><input type="checkbox" checked={preferredTimes.length === 0} onChange={() => setPreferredTimes([])} />Não tem preferência</label>{TIME_PREFERENCES.map(({ value, label }) => <label className="role-preference-option" key={value}><input type="checkbox" checked={preferredTimes.includes(value)} onChange={() => toggleTime(value)} />{label}</label>)}</fieldset>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Pencil size={16} /> {editing ? 'Salvar alterações' : 'Cadastrar'}</button></div></form></Modal>
 }
 function EventModal({ eventTypes, onClose, onSave }) { const [title, setTitle] = useState(''); const [kind, setKind] = useState(eventTypes[0] || 'Missa'); const [date, setDate] = useState(todayInputValue()); const [time, setTime] = useState('09:00'); const [error, setError] = useState(''); return <Modal title="Novo evento" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); if (!title.trim() || !date) return setError('Preencha o nome e a data do evento.'); onSave({ title: title.trim(), kind, date, time }) }}><label className="field-label">Nome do evento<input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Missa dominical" /></label><div className="field-grid"><label className="field-label">Tipo<select value={kind} onChange={(e) => setKind(e.target.value)}>{eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label className="field-label">Data<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label></div><label className="field-label">Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><button type="button" className="button button-outline" onClick={onClose}>Cancelar</button><button className="button button-primary"><Plus size={16} /> Criar evento</button></div></form></Modal> }
 function MinisterPicker({ ministers, value, onChange }) {
@@ -776,6 +785,10 @@ function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave
   const [customRole, setCustomRole] = useState('')
   const [error, setError] = useState('')
   const available = ministers.filter((person) => !assignments.some((assignment) => assignment.ministerId === person.id))
+  const selectedMinister = ministers.find((person) => person.id === ministerId)
+  const eventHour = event.time?.slice(0, 2)
+  const preferredTimeLabels = (selectedMinister?.preferredTimes || []).map((time) => TIME_PREFERENCES.find((option) => option.value === time)?.label).filter(Boolean)
+  const eventTimeIsPreferred = Boolean(selectedMinister?.preferredTimes?.includes(eventHour))
 
   return <Modal title="Adicionar à escala" onClose={onClose}><form onSubmit={(event) => {
     event.preventDefault()
@@ -786,7 +799,8 @@ function AssignmentModal({ event, ministers, assignments, roles, onClose, onSave
   }}>
     <div className="selected-event-summary"><span className="selected-event-icon"><CalendarDays size={18} /></span><div><strong>{event.title}</strong><span>{formatDate(event.date, { day: '2-digit', month: 'long' })} · {event.time}</span></div></div>
     <label className="field-label">Ministro<MinisterPicker ministers={available} value={ministerId} onChange={setMinisterId} /></label>
-    <label className="field-label">Papel no evento<select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((option) => <option key={option}>{option}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>
+    {selectedMinister && <p className={`assignment-time-preference ${eventTimeIsPreferred ? 'is-preferred' : ''}`}>{preferredTimeLabels.length ? eventTimeIsPreferred ? `Este evento às ${event.time?.slice(0, 5)} está entre os horários preferidos: ${preferredTimeLabels.join(', ')}.` : `Horários preferidos: ${preferredTimeLabels.join(', ')}. Este evento será às ${event.time?.slice(0, 5)}.` : 'Este ministro não tem preferência de horário.'}</p>}
+    <label className="field-label">Papel no evento<select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((option) => <option key={option} value={option}>{option}{selectedMinister?.preferredRoles?.includes(option) ? ' (preferido)' : ''}</option>)}<option value="__other__">Outro papel (digitar)</option></select></label>
     {role === '__other__' && <label className="field-label">Descreva o papel<input value={customRole} onChange={(event) => setCustomRole(event.target.value)} placeholder="Ex.: Acolhida" /></label>}
     {available.length === 0 && <div className="form-error">Todos os ministros ativos já estão nesta escala.</div>}
     {error && <div className="form-error">{error}</div>}

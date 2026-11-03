@@ -48,7 +48,7 @@ export async function loadData() {
   const error = people.error || events.error || assignments.error || roles.error || history.error || eventTypes.error
   if (error) throw error
   return {
-    ministers: people.data.map((p) => ({ id: p.id, name: p.name, whatsapp: p.whatsapp, active: p.active })),
+    ministers: people.data.map((p) => ({ id: p.id, name: p.name, whatsapp: p.whatsapp, preferredRoles: p.preferred_roles || [], preferredTimes: p.preferred_times || [], active: p.active })),
     events: events.data.map((e) => ({ id: e.id, title: e.title, date: e.event_date, time: e.event_time, kind: e.kind })),
     assignments: [
       ...assignments.data.map((a) => ({ id: a.id, eventId: a.event_id, ministerId: a.minister_id, role: a.role })),
@@ -60,12 +60,12 @@ export async function loadData() {
 }
 
 export async function insertMinister(person) {
-  const { error } = await supabase.from('ministers').insert({ name: person.name.trim(), whatsapp: person.whatsapp.trim(), active: true })
+  const { error } = await supabase.from('ministers').insert({ name: person.name.trim(), whatsapp: person.whatsapp.trim(), preferred_roles: person.preferredRoles || [], preferred_times: person.preferredTimes || [], active: true })
   if (error) throw error
 }
 
 export async function updateMinister(ministerId, person) {
-  const { error } = await supabase.from('ministers').update({ name: person.name.trim(), whatsapp: person.whatsapp.trim() }).eq('id', ministerId)
+  const { error } = await supabase.from('ministers').update({ name: person.name.trim(), whatsapp: person.whatsapp.trim(), preferred_roles: person.preferredRoles || [], preferred_times: person.preferredTimes || [] }).eq('id', ministerId)
   if (error) throw error
 }
 
