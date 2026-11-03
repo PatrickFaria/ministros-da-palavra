@@ -81,6 +81,13 @@ html[data-theme="dark"] .minister-picker-empty{color:#aab6ab}
 html[data-theme="dark"] .button-danger{background:#382b28;color:#e7aaa0;border-color:#60413b}
 html[data-theme="dark"] .button-danger:hover{background:#49332f;border-color:#80534a;color:#f0c2ba}
 .inactive-roster .row-actions{gap:6px;flex-wrap:wrap}
+.minister-name-button{border:0;background:transparent;padding:0;color:#415047;font-size:9px;font-weight:700;text-align:left}
+.minister-name-button:hover{color:var(--green);text-decoration:underline}
+.minister-name-button:focus-visible{outline:2px solid var(--green);outline-offset:3px;border-radius:2px}
+html[data-theme="dark"] .minister-name-button{color:#e4ebe4}
+html[data-theme="dark"] .minister-name-button:hover{color:#b9dfbd}
+.settings-event-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .table-toolbar-actions{display:flex;align-items:center;gap:8px}
 .table-collapse-toggle{flex:none}
 .collapse-chevron{transition:transform .16s ease}

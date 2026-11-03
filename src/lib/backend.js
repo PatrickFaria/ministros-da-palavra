@@ -81,6 +81,46 @@ export async function insertEvent(event) {
   return data.id
 }
 
+function agendaEventKey(event) {
+  const title = event.title.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')
+  return `${title}|${event.date}|${event.time.slice(0, 5)}`
+}
+
+export async function importAgendaEvents(events) {
+  if (!events.length) return { created: 0, duplicates: 0 }
+  const dates = events.map((event) => event.date).sort()
+  const { data: existingEvents, error: readError } = await supabase
+    .from('events')
+    .select('title,event_date,event_time')
+    .gte('event_date', dates[0])
+    .lte('event_date', dates.at(-1))
+  if (readError) throw readError
+
+  const knownEvents = new Set(existingEvents.map((event) => agendaEventKey({ title: event.title, date: event.event_date, time: event.event_time })))
+  const newEvents = []
+  let duplicates = 0
+  for (const event of events) {
+    const key = agendaEventKey(event)
+    if (knownEvents.has(key)) duplicates += 1
+    else {
+      knownEvents.add(key)
+      newEvents.push(event)
+    }
+  }
+
+  if (newEvents.length) {
+    const { error } = await supabase.from('events').insert(newEvents.map((event) => ({
+      title: event.title,
+      event_date: event.date,
+      event_time: event.time,
+      kind: event.kind,
+    })))
+    if (error) throw error
+  }
+
+  return { created: newEvents.length, duplicates }
+}
+
 export async function deleteEvent(eventId) {
   const { error } = await supabase.from('events').delete().eq('id', eventId)
   if (error) throw error

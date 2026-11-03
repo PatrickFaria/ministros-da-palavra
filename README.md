@@ -16,6 +16,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 - Tabela de rodízio mensal, ordenada por prioridade ou em ordem alfabética.
 - Detalhes das escalações ao passar o mouse, navegar com o teclado ou tocar nos indicadores mensais. O histórico importado sem detalhes é identificado na tabela.
 - Cadastro de novos tipos de papel e consulta de ministros inativos, com opção de reativá-los.
+- Importação direta de agenda mensal em PDF: registra apenas eventos cujo nome contém “Missa Matriz”, separa cada horário e ignora duplicados.
 - Importação de nomes e histórico mensal a partir de planilha `.xlsx` com participações registradas por cores.
 - Tema claro e escuro.
 - Modo de demonstração local para conhecer a interface sem configurar o Supabase.
@@ -25,6 +26,7 @@ O projeto foi pensado para funcionar também no celular. Quando publicado em HTT
 - React 19
 - Vite 7
 - Supabase (Auth e PostgreSQL com políticas RLS)
+- PDF.js para leitura de agendas mensais em PDF
 - PWA com manifesto e ícones para instalação no dispositivo
 
 ## Requisitos
@@ -57,6 +59,14 @@ Em uma compilação de produção sem as credenciais do Supabase, o app mostra u
 4. Informe o ano correspondente aos cabeçalhos mensais e revise o resumo antes de importar.
 
 A importação registra uma participação por ministro e mês marcado em verde. Os tons de vermelho indicam ausência de participação e células sem preenchimento ficam sem registro. O histórico mensal não informa evento, horário ou papel, então a tela do rodízio o apresenta como histórico sem detalhes. A planilha original não contém WhatsApp; os contatos podem ser adicionados depois no cadastro dos ministros.
+
+### Importar a agenda mensal em PDF
+
+1. Abra **Configurações**, na seção **Eventos cadastrados**, e clique em **Importar PDF**.
+2. Selecione a agenda mensal em PDF. A importação começa automaticamente e considera apenas nomes que contenham “Missa Matriz”.
+3. Cada horário listado vira um evento separado. Eventos com o mesmo nome, data e horário já cadastrados são ignorados; ao final, o app mostra o resumo da importação.
+
+O importador foi preparado para PDFs de texto no modelo de tabela da paróquia. PDF digitalizado como imagem ou com outra estrutura não é importado nesta versão.
 
 ## Configurar o Supabase
 

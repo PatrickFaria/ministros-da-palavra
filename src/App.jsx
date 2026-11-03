@@ -5,7 +5,7 @@ import {
   CircleHelp, Clock3, Cross, LayoutDashboard, ListFilter, LogOut, Menu, Moon, Plus,
   Search, Settings2, Sun, Users, UserRoundCheck, X, ArrowUpRight, MessageCircle, ClipboardList, Pencil, Upload, Trash2,
 } from 'lucide-react'
-import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, deleteEvent as deleteEventRecord, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
+import { supabaseConfigured, demoMode, supabase, signIn, signOut, loadData, insertMinister, updateMinister as updateMinisterRecord, insertEvent, importAgendaEvents as importAgendaEventsRecord, deleteEvent as deleteEventRecord, insertAssignment, insertRole, insertEventType, importLegacyRoster, setMinisterActive, deleteMinister as deleteMinisterRecord } from './lib/backend.js'
 
 const STORAGE_KEY = 'ministros-da-palavra-demo-v1'
 const DEFAULT_ROLES = ['Comentarista/preces', 'Primeira Leitura', 'Segunda Leitura']
@@ -130,6 +130,8 @@ function App() {
   const [mobileMenu, setMobileMenu] = useState(false)
   const [showDemo, setShowDemo] = useState(true)
   const [calendarMonth, setCalendarMonth] = useState(currentMonthKey)
+  const [agendaPdfImporting, setAgendaPdfImporting] = useState(false)
+  const agendaPdfInputRef = useRef(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('ministros-da-palavra-theme') || 'light')
   const [auth, setAuth] = useState({ status: supabaseConfigured ? 'loading' : demoMode ? 'demo' : 'configuration-error', email: '', error: '' })
 
@@ -224,6 +226,38 @@ function App() {
       setView('eventos')
       setModal('')
     })
+  }
+  async function importMonthlyAgenda(file) {
+    if (!file || agendaPdfImporting) return
+    setAgendaPdfImporting(true)
+    try {
+      const { parseMonthlyMassAgenda } = await import('./lib/pdfAgenda.js')
+      const events = await parseMonthlyMassAgenda(file)
+      let result
+      if (supabaseConfigured) {
+        result = await importAgendaEventsRecord(events)
+        setData(await loadData())
+      } else if (demoMode) {
+        const keyFor = (event) => `${normalizeMinisterName(event.title)}|${event.date}|${event.time.slice(0, 5)}`
+        const knownEvents = new Set(data.events.map(keyFor))
+        const newEvents = []
+        let duplicates = 0
+        for (const event of events) {
+          if (knownEvents.has(keyFor(event))) duplicates += 1
+          else { knownEvents.add(keyFor(event)); newEvents.push({ id: uid(), ...event }) }
+        }
+        setData((previous) => ({ ...previous, events: [...previous.events, ...newEvents] }))
+        result = { created: newEvents.length, duplicates }
+      } else {
+        throw new Error('O Supabase precisa estar configurado para importar eventos.')
+      }
+      setToast(`Importação concluída: ${result.created} evento(s) criado(s), ${result.duplicates} duplicado(s) ignorado(s).`)
+    } catch (error) {
+      setToast(`Não foi possível importar o PDF: ${error.message || 'erro de leitura ou conexão'}`)
+    } finally {
+      setAgendaPdfImporting(false)
+      if (agendaPdfInputRef.current) agendaPdfInputRef.current.value = ''
+    }
   }
   function removeEvent(event) {
     if (!window.confirm(`Excluir permanentemente "${event.title}"? Todas as escalações deste evento também serão apagadas. Essa ação não pode ser desfeita.`)) return
@@ -345,10 +379,11 @@ function App() {
               <div><strong>{activeMinisters.length} ministros ativos</strong><span>Os dados de demonstração não são contatos reais.</span></div>
               <div className="table-toolbar-actions">
                 {activeMinistersExpanded && <label className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar ministro" /></label>}
+                {activeMinistersExpanded && <div className="segmented" role="group" aria-label="Ordenar ministros"><button className={sortMode === 'priority' ? 'selected' : ''} aria-pressed={sortMode === 'priority'} onClick={() => setSortMode('priority')}>Prioridade</button><button className={sortMode === 'alphabetical' ? 'selected' : ''} aria-pressed={sortMode === 'alphabetical'} onClick={() => setSortMode('alphabetical')}>A–Z</button></div>}
                 <button className="button button-outline button-small table-collapse-toggle" aria-controls="active-ministers-table" aria-expanded={activeMinistersExpanded} aria-label={activeMinistersExpanded ? 'Minimizar tabela de ministros ativos' : 'Mostrar tabela de ministros ativos'} onClick={() => setActiveMinistersExpanded((expanded) => !expanded)}><ChevronDown className={activeMinistersExpanded ? 'collapse-chevron expanded' : 'collapse-chevron'} size={15} />{activeMinistersExpanded ? 'Minimizar' : 'Mostrar tabela'}</button>
               </div>
             </div>
-            <div className="table-wrap" id="active-ministers-table" hidden={!activeMinistersExpanded}><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person, index) => <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><strong>{person.name}</strong></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${index < 3 ? 'high' : ''}`}>{index < 3 ? `#${index + 1} · Prioridade` : `#${index + 1}`}</span></td><td><div className="row-actions"><button className="row-menu" title="Editar ministro" onClick={() => { setEditingMinister(person); setModal('edit-minister') }}><Pencil size={15} /></button><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></div></td></tr>)}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div>
+            <div className="table-wrap" id="active-ministers-table" hidden={!activeMinistersExpanded}><table className="people-table"><thead><tr><th>MINISTRO</th><th>WHATSAPP</th><th>ESCALAÇÕES</th><th>ÚLTIMA ESCALA</th><th>PRIORIDADE</th><th></th></tr></thead><tbody>{filteredPeople.map((person) => { const priorityRank = priorityPeople.findIndex((priorityPerson) => priorityPerson.id === person.id) + 1; const editMinister = () => { setEditingMinister(person); setModal('edit-minister') }; return <tr key={person.id}><td><div className="table-person"><span className="avatar person-avatar">{initials(person.name)}</span><button className="minister-name-button" type="button" onClick={editMinister} aria-label={`Editar ministro ${person.name}`}>{person.name}</button></div></td><td>{person.whatsapp ? <a className="phone-link" href={`https://wa.me/${normalizePhone(person.whatsapp)}`} target="_blank" rel="noreferrer"><MessageCircle size={15} />{person.whatsapp}</a> : <span className="muted">Não informado</span>}</td><td><span className="count-chip">{person.total}</span></td><td>{person.lastAssignment ? formatMonth(person.lastAssignment) : <span className="muted">Sem escala</span>}</td><td><span className={`priority-tag ${priorityRank <= 3 ? 'high' : ''}`}>#{priorityRank}{priorityRank <= 3 ? ' · Prioridade' : ''}</span></td><td><div className="row-actions"><button className="row-menu" title="Editar ministro" onClick={editMinister}><Pencil size={15} /></button><button className="row-menu" title="Inativar ministro" onClick={() => deactivate(person)}><ChevronDown size={17} /></button></div></td></tr> })}</tbody></table>{filteredPeople.length === 0 && <EmptyState text="Nenhum ministro encontrado." />}</div>
           </section>
           <section className="panel roster-panel inactive-roster">
             <PanelHeading title="Ministros inativados" subtitle={`${inactivePeople.length} pessoa(s) fora do rodízio; o histórico foi preservado.`} action={<button className="button button-outline button-small table-collapse-toggle" aria-controls="inactive-ministers-table" aria-expanded={inactiveMinistersExpanded} aria-label={inactiveMinistersExpanded ? 'Minimizar tabela de ministros inativos' : 'Mostrar tabela de ministros inativos'} onClick={() => setInactiveMinistersExpanded((expanded) => !expanded)}><ChevronDown className={inactiveMinistersExpanded ? 'collapse-chevron expanded' : 'collapse-chevron'} size={15} />{inactiveMinistersExpanded ? 'Minimizar' : 'Mostrar tabela'}</button>} />
@@ -364,7 +399,7 @@ function App() {
         {view === 'configuracoes' && <>
           <div className="page-heading"><div><span className="eyebrow">PREFERÊNCIAS DA EQUIPE</span><h1>Configurações</h1><p>Cadastre eventos e mantenha os papéis disponíveis na escala.</p></div></div>
           <div className="settings-grid">
-            <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos da comunidade." action={<button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button>} />{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</section>
+            <section className="panel settings-events"><PanelHeading title="Eventos cadastrados" subtitle="Inclua missas e outros eventos ou importe a agenda mensal em PDF." action={<div className="settings-event-actions"><input ref={agendaPdfInputRef} className="visually-hidden" type="file" accept=".pdf,application/pdf" aria-label="Selecionar agenda mensal em PDF" onChange={(event) => importMonthlyAgenda(event.target.files?.[0])} /><button className="button button-outline button-small" disabled={agendaPdfImporting || (!supabaseConfigured && !demoMode)} onClick={() => agendaPdfInputRef.current?.click()}><Upload size={15} /> {agendaPdfImporting ? 'Importando PDF…' : 'Importar PDF'}</button><button className="button button-primary button-small" onClick={() => setModal('event')}><Plus size={15} /> Novo evento</button></div>} />{allEvents.length ? <div className="agenda-list settings-event-list">{allEvents.map((event) => <EventListRow key={event.id} event={event} people={data.ministers} assignments={data.assignments.filter((assignment) => assignment.eventId === event.id)} onOpen={() => { setSelectedEvent(event.id); setView('eventos') }} />)}</div> : <EmptyState text="Ainda não há eventos cadastrados." action="Cadastrar evento" onClick={() => setModal('event')} />}</section>
             <RoleSettings roles={data.roles} onAdd={addRole} />
             <EventTypeSettings eventTypes={data.eventTypes} onAdd={addEventType} />
           </div>
