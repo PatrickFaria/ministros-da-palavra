@@ -131,6 +131,11 @@ export async function insertAssignment(assignment) {
   if (error) throw error
 }
 
+export async function deleteAssignment(assignmentId) {
+  const { error } = await supabase.from('assignments').delete().eq('id', assignmentId)
+  if (error) throw error
+}
+
 export async function insertRole(name) {
   const { error } = await supabase.from('minister_roles').insert({ name: name.trim() })
   if (error) throw error
