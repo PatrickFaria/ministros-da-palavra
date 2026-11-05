@@ -257,7 +257,9 @@ function App() {
   }), [data.ministers, data.assignments, data.events])
   const readStats = ministerStats.filter((person) => person.active)
   const inactivePeople = ministerStats.filter((person) => !person.active).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-  const priorityPeople = [...readStats].sort((a, b) => a.total - b.total || (a.lastAssignment || '0000-00').localeCompare(b.lastAssignment || '0000-00') || a.name.localeCompare(b.name, 'pt-BR'))
+  // A prioridade depende apenas do tempo desde a escala mais recente.
+  // Quem nunca foi escalado vem primeiro; empates ficam em ordem alfabética.
+  const priorityPeople = [...readStats].sort((a, b) => (a.lastAssignment || '0000-00-00').localeCompare(b.lastAssignment || '0000-00-00') || a.name.localeCompare(b.name, 'pt-BR'))
   const displayPeople = sortMode === 'priority' ? priorityPeople : [...readStats].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   const filteredPeople = displayPeople.filter((person) => person.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
 
@@ -408,7 +410,7 @@ function App() {
       <div className="nav-label">MENU PRINCIPAL</div>
       <nav>{navItems.map((item) => <button key={item.id} className={`nav-item ${view === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.label}</span>{item.id === 'eventos' && upcomingEvents.length > 0 && <small>{upcomingEvents.length}</small>}</button>)}</nav>
       <div className="sidebar-spacer" />
-      <div className="side-note"><div className="side-note-icon"><CircleHelp size={17} /></div><strong>Um rodízio mais justo</strong><p>Quem foi escalado menos vezes e está há mais tempo sem oportunidade tem prioridade.</p></div>
+      <div className="side-note"><div className="side-note-icon"><CircleHelp size={17} /></div><strong>Um rodízio mais justo</strong><p>Quem está há mais tempo sem ser escalado tem prioridade. O total de escalações é apenas informativo.</p></div>
       <div className="user-card"><div className="avatar avatar-admin">{supabaseConfigured ? initials(auth.email) : 'LP'}</div><div><strong>{supabaseConfigured ? auth.email : 'Equipe de Liturgia'}</strong><span>{supabaseConfigured ? 'Sessão autorizada' : 'Modo demonstração'}</span></div><button className="icon-button tiny" title={supabaseConfigured ? 'Sair da conta' : 'Configurações'} onClick={() => supabaseConfigured ? signOut() : setToast('Configurações serão adicionadas em uma próxima etapa.')}>{supabaseConfigured ? <LogOut size={16} /> : <Settings2 size={16} />}</button></div>
     </aside>
     {mobileMenu && <button className="sidebar-scrim" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
